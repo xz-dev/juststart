@@ -1,5 +1,6 @@
 import subprocess
-from .error import RunnerError
+from pathlib import Path
+from .errors import RunnerError
 
 
 class Runner:
@@ -9,9 +10,9 @@ class Runner:
         args: list[str],
         env: dict,
         auto_restart: bool,
-        _stdin: str,
-        _stdout: str,
-        _stderr: str,
+        stdin: str,
+        stdout: str,
+        stderr: str,
     ):
         self.path = path
         self.args = args
@@ -19,9 +20,9 @@ class Runner:
 
         self.auto_restart = auto_restart
 
-        self.stdin = stdin
-        self.stdout = stdout
-        self.stderr = stderr
+        self._stdin = stdin
+        self._stdout = stdout
+        self._stderr = stderr
 
         self.process = None
         self.returncode = None
@@ -31,24 +32,26 @@ class Runner:
         self.stderr_io = None
 
     def start(self):
-        if self.process:
+        if self.is_running():
             raise RunnerError(f"Process is already running")
-        self.stdin_io = open(filename, "r")
-        self.stdout_io = open(self.stdout_file, "a")
-        self.stderr_io = open(self.stderr_file, "a")
+        self.stdin_io = open(self.stdin, "a+")
+        self.stdin_io.seek(0)
+        self.stdout_io = open(self.stdout, "a")
+        self.stderr_io = open(self.stderr, "a")
         self.process = subprocess.Popen(
-            [self.path].plus(self.args),
+            [self.path] + self.args,
+            cwd=str(Path(self.path).parent),
             stdin=self.stdin_io,
             stdout=self.stdout_io,
             stderr=self.stderr_io,
             env=self.env,
-            shell=True,
         )
 
     def stop(self):
-        if not self.process:
+        if not self.is_running():
             raise RunnerError(f"Process is not running")
         self.process.terminate()
+        self.process.wait()
         self.returncode = self.process.returncode
         if self.stdin_io and not self.stdin_io.closed:
             self.stdin_io.close()
@@ -123,9 +126,10 @@ class Runner:
             f"path: {self.path}",
             f"args: {self.args}",
             f"env: {self.env}",
-            f"stdin: {self.stdin_file}",
-            f"stdout: {self.stdout_file}",
-            f"stderr: {self.stderr_file}",
+            f"auto_restart: {self.auto_restart}",
+            f"stdin: {self.stdin}",
+            f"stdout: {self.stdout}",
+            f"stderr: {self.stderr}",
             f"status: {status}",
             f"{returncode_str}",
         ]

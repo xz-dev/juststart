@@ -1,7 +1,7 @@
 from pathlib import Path
 from dataclasses import dataclass
 from .env import get_env
-from .error import RunnerConfigError
+from .errors import RunnerConfigError
 
 
 @dataclass
@@ -15,9 +15,8 @@ class RunnerConfig:
 
 
 def __get_runner_config(path) -> list[str]:
-    runner_path = Path(path)
     try:
-        with open(runner_path / "conf") as f:
+        with open(path) as f:
             return f.readlines()
     except FileNotFoundError:
         return []
@@ -39,7 +38,7 @@ def __get_single_config(key: str, config: str):
 
 
 def get_runner_config(path, default_config: RunnerConfig = None):
-    parent = Path(path).parent
+    parent = Path(path)
     try:
         with open(parent / "args") as f:
             args = f.readlines()
@@ -56,7 +55,7 @@ def get_runner_config(path, default_config: RunnerConfig = None):
         stdout = default_config.stdout
         stderr = default_config.stderr
 
-    config_list = __get_runner_config(path)
+    config_list = __get_runner_config(parent / "conf")
     for config in config_list:
         try:
             auto_restart = __get_single_config("auto_restart", config)
@@ -94,7 +93,7 @@ def get_runner_config(path, default_config: RunnerConfig = None):
     return RunnerConfig(
         args=args,
         env=get_env(parent / "env"),
-        auto_restar=auto_restart,
+        auto_restart=auto_restart,
         stdin=stdin,
         stdout=stdout,
         stderr=stderr,

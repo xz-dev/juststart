@@ -2,8 +2,8 @@ import logging
 import argparse
 from pathlib import Path
 
-from .daemon import run_deamon, runner_wrapper
-from .runner_manager import RunnerManager
+from .daemon import run_deamon, get_runner_manager
+from .errors import BaseError
 
 
 
@@ -103,30 +103,42 @@ def main():
         password = get_password_from_config_path(config_path)
 
     if args.command:
-        manager = MyManager(address=(args.addr, args.port), authkey=password)
-        manager.connect()
-        runner_manager: RunnerManager = manager.get_runner_manager()
-        path = args.path
-        if args.command == "add":
-            return_value = runner_wrapper(runner_manager.config_manager.add_runner(path))
-        elif args.command == "del":
-            return_value = runner_wrapper(runner_manager.config_manager.del_runner(path))
-        elif args.command == "enable":
-            return_value = runner_wrapper(runner_manager.config_manager.enable_runner(path))
-        elif args.command == "disable":
-            return_value = runner_wrapper(runner_manager.config_manager.disable_runner(path))
-        elif args.command == "start":
-            return_value = runner_wrapper(runner_manager.start_runner(path))
-        elif args.command == "restart":
-            return_value = runner_wrapper(runner_manager.restart_runner(path))
-        elif args.command == "stop":
-            return_value = runner_wrapper(runner_manager.stop_runner(path))
-        elif args.command == "reload_config":
-            return_value = runner_wrapper(runner_manager.reload_runner(path))
-        elif args.command == "status":
-            return_value = runner_wrapper(runner_manager.status_runner(path).status)
+        runner_manager = get_manager(address=(args.addr, args.port), authkey=password)
+        try:
+            path = args.path
+            if args.command == "add":
+                runner_manager.config_manager.add_runner(path)
+            elif args.command == "del":
+                runner_manager.config_manager.del_runner(path)
+            elif args.command == "enable":
+                runner_manager.config_manager.enable_runner(path)
+            elif args.command == "disable":
+                runner_manager.config_manager.disable_runner(path)
+            elif args.command == "start":
+                runner_manager.start_runner(path)
+            elif args.command == "restart":
+                runner_manager.restart_runner(path)
+            elif args.command == "stop":
+                runner_manager.stop_runner(path)
+            elif args.command == "reload_config":
+                runner_manager.reload_runner(path)
+            elif args.command == "status":
+                print(runner_manager.status_runner(path).status)
+            else: logging.error("use --help to see available commands")
+        except BaseError as e:
+            message = e.message
+            if e.level == "debug":
+                logging.debug(message)
+            elif e.level == "info":
+                print(message)
+            elif e.level == "warning":
+                logging.warning(message)
+            elif e.level == "error":
+                logging.error(message)
     else:
-        config_path = args.config_path
-        if not config_path:
-            logging.exception("No config file specified")
-        run_deamon(args.address, args.port, password, config_path)
+        print(dict(args))
+        if not args.config:
+            parser.print_help()
+        else:
+            config_path = args.config
+            run_deamon(args.address, args.port, password, config_path)

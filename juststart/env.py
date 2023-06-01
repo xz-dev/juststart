@@ -1,5 +1,13 @@
+import os
 import subprocess
 
+def _parse_env_output(output):
+    env_vars = {}
+    lines = output.strip().split("\n")
+    for line in lines:
+        key, value = line.strip().split("=", 1)
+        env_vars[key] = value
+    return env_vars
 
 def get_env(env_file=None):
     args = []
@@ -14,4 +22,4 @@ def get_env(env_file=None):
     except FileNotFoundError:
         pass
     process = subprocess.run(*args, stdout=subprocess.PIPE)
-    return process.env
+    return _parse_env_output(process.stdout.decode("utf-8"))
