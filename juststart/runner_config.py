@@ -8,10 +8,26 @@ from .errors import RunnerConfigError
 class RunnerConfig:
     args: list[str]
     env: dict
-    auto_restart: bool
+    auto_restart: float
     stdin: str
     stdout: str
     stderr: str
+
+    def plus(self, other: "RunnerConfig") -> "RunnerConfig":
+        args = self.args
+        for arg in self.other:
+            if arg[:2] == "- " and arg[2:] in args:
+                args.remove(arg[2:])
+            else:
+                args.append(arg)
+        return RunnerConfig(
+            args=args,
+            env=other.env,
+            auto_restart=other.auto_restart,
+            stdin=other.stdin,
+            stdout=other.stdout,
+            stderr=other.stderr,
+        )
 
 
 def __get_runner_config(path) -> list[str]:
@@ -37,25 +53,50 @@ def __get_single_config(key: str, config: str):
     raise KeyError
 
 
-def get_runner_config(path, default_config: RunnerConfig = None):
-    parent = Path(path)
+def _get_default_config(work_path: Path):
+    path = Path(work_path)
+    return RunnerConfig(
+        args=[],
+        env={},
+        auto_restart=0,
+        stdin=path / "stdin",
+        stdout=path / "stdout",
+        stderr=path / "stderr",
+    )
+
+
+def get_runner_config(path, base_config: RunnerConfig = None) -> RunnerConfig:
+    if base_config is None:
+        base_config = _get_default_config(path)
+    return _get_runner_config(Path(path), base_config)
+
+
+def _get_runner_config(work_path: Path, base_config: RunnerConfig) -> RunnerConfig:
+    parent = work_path.parent
+    if (
+        (parent / "args").exists()
+        or (parent / "env").exists()
+        or (parent / "conf").exists()
+    ):
+        base_config = __get_runner_config(work_path, base_config)
+        return _get_runner_config(parent, base_config)
+    else:
+        return base_config
+
+
+def __get_runner_config(path: Path, base_config: RunnerConfig):
     try:
-        with open(parent / "args") as f:
+        with open(path / "args") as f:
             args = f.readlines()
     except FileNotFoundError:
-        args = []
-    auto_restart = 0
-    stdin = parent / "stdin"
-    stdout = parent / "stdout"
-    stderr = parent / "stderr"
-    if default_config is not None:
-        args = default_config.args
-        auto_restart = default_config.auto_restart
-        stdin = default_config.stdin
-        stdout = default_config.stdout
-        stderr = default_config.stderr
+        args = base_config.args
+    env = base_config.env
+    auto_restart = base_config.auto_restart
+    stdin = base_config.stdin
+    stdout = base_config.stdout
+    stderr = base_config.stderr
 
-    config_list = __get_runner_config(parent / "conf")
+    config_list = __get_runner_config(path / "conf")
     for config in config_list:
         try:
             auto_restart = __get_single_config("auto_restart", config)
@@ -94,11 +135,13 @@ def get_runner_config(path, default_config: RunnerConfig = None):
         except KeyError:
             pass
 
-    return RunnerConfig(
-        args=args,
-        env=get_env(parent / "env"),
-        auto_restart=auto_restart,
-        stdin=stdin,
-        stdout=stdout,
-        stderr=stderr,
+    return base_config.plus(
+        RunnerConfig(
+            args=args,
+            env=get_env(env, path / "env"),
+            auto_restart=auto_restart,
+            stdin=stdin,
+            stdout=stdout,
+            stderr=stderr,
+        )
     )

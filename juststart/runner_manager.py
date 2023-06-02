@@ -135,7 +135,7 @@ class RunnerManager:
             config_path = str(Path(path).parent)
             config = get_runner_config(
                 config_path,
-                default_config=get_runner_config(self.default_runner_config_path),
+                base_config=get_runner_config(self.default_runner_config_path),
             )
             runner = Runner(
                 path=path,

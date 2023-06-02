@@ -9,7 +9,7 @@ def _parse_env_output(output):
         env_vars[key] = value
     return env_vars
 
-def get_env(env_file=None):
+def get_env(base_env: dict[str, any], env_file=None):
     args = []
     if os.name == "posix":
         args.append("env")
@@ -21,5 +21,5 @@ def get_env(env_file=None):
                 args.append(line)
     except FileNotFoundError:
         pass
-    process = subprocess.run(*args, stdout=subprocess.PIPE)
+    process = subprocess.run(*args, env=base_env, stdout=subprocess.PIPE)
     return _parse_env_output(process.stdout.decode("utf-8"))

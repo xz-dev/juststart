@@ -20,6 +20,7 @@ class Runner:
         self.env = env
 
         self.auto_restart = auto_restart
+        self.booted_num = 0
 
         self._stdin = stdin
         self._stdout = stdout
@@ -65,6 +66,7 @@ class Runner:
             stderr=self.stderr_io,
             env=self.env,
         )
+        self.booted_num += 1
 
     def stop(self):
         if not self.is_running():
@@ -146,6 +148,7 @@ class Runner:
             f"args: {self.args}",
             f"env: {self.env}",
             f"auto_restart: {self.auto_restart}",
+            f"booted_num: {self.booted_num}",
             f"stdin: {self.stdin}",
             f"stdout: {self.stdout}",
             f"stderr: {self.stderr}",
