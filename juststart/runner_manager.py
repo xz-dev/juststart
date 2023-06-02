@@ -133,10 +133,9 @@ class RunnerManager:
             self.reload_runner(path)
         except RunnerError:
             config_path = str(Path(path).parent)
-            config = get_runner_config(
-                config_path,
-                base_config=get_runner_config(self.default_runner_config_path),
-            )
+            default_config = get_runner_config(self.default_runner_config_path)
+            config = get_runner_config(config_path, base_config=default_config)
+            print(config)
             runner = Runner(
                 path=path,
                 args=config.args,

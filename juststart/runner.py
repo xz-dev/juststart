@@ -1,3 +1,4 @@
+from time import time
 import asyncio
 import subprocess
 from pathlib import Path
@@ -21,6 +22,10 @@ class Runner:
 
         self.auto_restart = auto_restart
         self.booted_num = 0
+        self.boot_lock = asyncio.Lock()
+        self.blocked_num = 0
+        self.blocked_time = 0
+        self.blocked_program = None
 
         self._stdin = stdin
         self._stdout = stdout
@@ -34,22 +39,59 @@ class Runner:
         self.stderr_io = None
 
     def start(self, loop: asyncio.AbstractEventLoop):
-        self._start()
         self.start_monitoring(loop)
 
     def start_monitoring(self, loop: asyncio.AbstractEventLoop):
         async def monitor():
-            while True:
-                if self.auto_restart < 0:
-                    break
-                if not self.is_running():
-                    if self.auto_restart > 0:
-                        await asyncio.sleep(self.auto_restart)
-                    await asyncio.to_thread(self._start)
-                await asyncio.sleep(0.1)
+            async with self.boot_lock:
+                while True:
+                    await self._check_blocker_list()
+                    if not self.is_running():
+                        if self.auto_restart > 0:
+                            await asyncio.sleep(self.auto_restart)
+                        await asyncio.to_thread(self._start)
+                    if self.auto_restart < 0:
+                        break
+                    await asyncio.sleep(0.1)
 
         future = asyncio.run_coroutine_threadsafe(monitor(), loop)
         return future
+
+    async def _check_blocker(self, path: str):
+        self.blocked_program = path
+        self.blocked_time = time()
+        try:
+            process = await asyncio.create_subprocess_exec(
+                path,
+                *self.args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=str(Path(path).parent),
+                env=self.env,
+            )
+        except Exception as e:
+            self.blocked_program = e
+        try:
+            stdout, stderr = await process.communicate()
+            sleep_time = int(stdout)
+            if sleep_time > 0:
+                await asyncio.sleep(sleep_time)
+                self.blocked_num += 1
+            else:
+                pass
+        except ValueError:
+            pass
+        if process.returncode != 0:
+            await self._check_blocker(path)
+
+    async def _check_blocker_list(self):
+        path = Path(self.path).parent / "blocker"
+        if path.exists():
+            if path.is_dir():
+                for blocker in path.iterdir():
+                    await self._check_blocker(blocker)
+            else:
+                await self._check_blocker(path)
 
     def _start(self):
         if self.is_running():
@@ -92,6 +134,9 @@ class Runner:
         else:
             return False
 
+    def is_blocking(self):
+        return self.boot_lock.locked() and not self.is_running()
+
     @property
     def stdin(self):
         return self._stdin
@@ -113,7 +158,7 @@ class Runner:
         if old_stdin_io and not old_stdin_io.closed:
             old_stdin_io.close()
 
-    @stdin.setter
+    @stdout.setter
     def stdout(self, path):
         old_stdout_io = self.stdout_io
         if self.process and path:
@@ -122,7 +167,7 @@ class Runner:
         if old_stdout_io and not old_stdout_io.closed:
             old_stdout_io.close()
 
-    @stdin.setter
+    @stderr.setter
     def stderr(self, path):
         old_stderr_io = self.stderr_io
         if self.process and path:
@@ -133,16 +178,20 @@ class Runner:
 
     @property
     def status_str(self) -> str:
-        if self.process:
+        if self.is_blocking():
+            status = f"Booting(blocked: {self.blocked_num})"
+            ext_str = f"blocked_time: {self.blocked_time}\n"
+            ext_str += f"blocked_program: {self.blocked_program}"
+        elif self.process:
             if self.process.poll() is None:
                 status = "Running"
-                returncode_str = f"last returncode: {self.returncode}"
+                ext_str = f"last returncode: {self.returncode}"
             else:
                 status = "Stopped"
-                returncode_str = f"returncode: {self.returncode}"
+                ext_str = f"returncode: {self.returncode}"
         else:
             status = "Never run"
-            returncode_str = f"returncode: {self.returncode}"
+            ext_str = f"returncode: {self.returncode}"
         details = [
             f"path: {self.path}",
             f"args: {self.args}",
@@ -153,6 +202,6 @@ class Runner:
             f"stdout: {self.stdout}",
             f"stderr: {self.stderr}",
             f"status: {status}",
-            f"{returncode_str}",
+            f"{ext_str}",
         ]
         return status + "\n" + "\n".join(details)
