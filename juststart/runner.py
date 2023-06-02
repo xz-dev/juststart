@@ -17,7 +17,7 @@ class Runner:
         stderr: str,
     ):
         self.path = path
-        self.args = args
+        self._args = args
         self.env = env
 
         self.auto_restart = auto_restart
@@ -138,6 +138,16 @@ class Runner:
         return self.boot_lock.locked() and not self.is_running()
 
     @property
+    def args(self):
+        args = []
+        for arg in self._args:
+            if arg[:2] == "- " and arg[2:]:
+                pass
+            else:
+                args.append(arg)
+        return self._args
+
+    @property
     def stdin(self):
         return self._stdin
 
@@ -182,8 +192,8 @@ class Runner:
             status = f"Booting(blocked: {self.blocked_num})"
             ext_str = f"blocked_time: {self.blocked_time}\n"
             ext_str += f"blocked_program: {self.blocked_program}"
-        elif self.process:
-            if self.process.poll() is None:
+        elif self.booted_num > 0:
+            if self.is_running():
                 status = "Running"
                 ext_str = f"last returncode: {self.returncode}"
             else:
@@ -201,6 +211,7 @@ class Runner:
             f"stdin: {self.stdin}",
             f"stdout: {self.stdout}",
             f"stderr: {self.stderr}",
+            f"",
             f"status: {status}",
             f"{ext_str}",
         ]

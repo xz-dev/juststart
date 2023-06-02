@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from .runner_manager import RunnerManagerStatus
@@ -32,7 +33,20 @@ def runner_status_dict_to_str(
 ) -> str:
     result = ""
     for path, status_list in runner_status_dict.items():
-        result += f"{path}:\n"
-        for status in status_list:
-            result += f"    {status}\n"
-    return result
+        result_list = [f"{path}:"]
+        if RunnerManagerStatus.INITED_BUT_NOT_SAVED in status_list:
+            result_list.append("[volatile]")
+        if RunnerManagerStatus.RUNNING in status_list:
+            result_list.append("running")
+        elif RunnerManagerStatus.NOT_RUNNING in status_list:
+            if RunnerManagerStatus.INITED in status_list:
+                result_list.append("[gc]")
+            else:
+                result_list.append("stopped")
+        if RunnerManagerStatus.ENABLED_BOOT in status_list:
+            result_list.append("boot")
+        if len(result_list) == 1:
+            result_list.append("[idle]")
+        result_list.append("\n")
+        result += " ".join(result_list)
+    return result[:-1]

@@ -5,8 +5,9 @@ def _parse_env_output(output):
     env_vars = {}
     lines = output.strip().split("\n")
     for line in lines:
-        key, value = line.strip().split("=", 1)
-        env_vars[key] = value
+        if line.strip():
+            key, value = line.strip().split("=", 1)
+            env_vars[key] = value
     return env_vars
 
 def get_env(base_env: dict[str, any], env_file=None):

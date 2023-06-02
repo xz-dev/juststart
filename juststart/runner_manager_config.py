@@ -24,7 +24,7 @@ class RunnerManagerConfig:
         with open(self.runner_list_file_path, "w") as f:
             for path in sorted(runners_info):
                 is_enabled = runners_info[path]
-                f.write(f"- {path}\n" if is_enabled else f"{path}\n")
+                f.write(f"{path}\n" if is_enabled else f"- {path}\n")
 
     def add_runner(self, path):
         runners_info = self.runner_info_dict
@@ -49,12 +49,11 @@ class RunnerManagerConfig:
         runners_info = self.runner_info_dict
         if path not in runners_info:
             raise ManagerConfigError(f"{path} is not added")
-        runners_info = self.runner_info_dict()
         runners_info.pop(path)
         self.runner_info_dict = runners_info
 
     def enable_runner(self, path):
-        runners_info = self.runner_info_dict()
+        runners_info = self.runner_info_dict
         if path not in runners_info:
             raise ManagerConfigError(f"{path} is not added")
         if runners_info[path]:
@@ -63,7 +62,7 @@ class RunnerManagerConfig:
         self.runner_info_dict = runners_info
 
     def disable_runner(self, path):
-        runners_info = self.runner_info_dict()
+        runners_info = self.runner_info_dict
         if path not in runners_info:
             logging.error(f"{path} is not added")
             return

@@ -59,7 +59,7 @@ def run_deamon(address: str, port: int, password: bytes, config_dir_path: str):
         return
     config_dir = Path(config_dir_path)
     runner_list_file_path = config_dir / "runner_list"
-    default_runner_config_file_path = config_dir / "default_runner_config"
+    default_runner_config_file_path = config_dir / "default"
     default_runner_config_file_path.mkdir(parents=True, exist_ok=True)
     runner_manager = RunnerManager(
         runner_list_file_path=str(runner_list_file_path),

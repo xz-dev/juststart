@@ -1,8 +1,8 @@
 import logging
-from threading import Thread
-from pathlib import Path
 from asyncio import new_event_loop
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from threading import Thread
 
 from .errors import RunnerError
 from .runner import Runner
@@ -53,7 +53,7 @@ class RunnerManager:
         self.event_loop_thread.join()
         self.loop.close()
 
-    def get_runner_status_dict(self) -> dict[str, set[RunnerManagerStatus]]:
+    def get_runner_status_dict(self) -> dict[str, list[RunnerManagerStatus]]:
         runner_status_dict = {}
         for path, enable in self.manager_config.runner_info_dict.items():
             status_list = set()
@@ -70,7 +70,7 @@ class RunnerManager:
                     status_list.add(RunnerManagerStatus.NOT_RUNNING)
             except RunnerError:
                 status_list.add(RunnerManagerStatus.NOT_INITED)
-            runner_status_dict[path] = sorted(status_list)
+            runner_status_dict[path] = status_list
         for runner in self.runner_dict.values():
             try:
                 status_list = runner_status_dict[runner.path]
@@ -81,8 +81,11 @@ class RunnerManager:
                 status_list.add(RunnerManagerStatus.RUNNING)
             else:
                 status_list.add(RunnerManagerStatus.NOT_RUNNING)
-            runner_status_dict[runner.path] = sorted(status_list)
-        return sorted(runner_status_dict)
+            runner_status_dict[runner.path] = status_list
+        sorted_status_dict = {}
+        for path, status_list in sorted(runner_status_dict.items()):
+            sorted_status_dict[path] = sorted(status_list)
+        return sorted_status_dict
 
     def reload_runner(self, path: str):
         runner = self.get_runner(path)
@@ -133,9 +136,7 @@ class RunnerManager:
             self.reload_runner(path)
         except RunnerError:
             config_path = str(Path(path).parent)
-            default_config = get_runner_config(self.default_runner_config_path)
-            config = get_runner_config(config_path, base_config=default_config)
-            print(config)
+            config = get_runner_config(config_path, self.default_runner_config_path)
             runner = Runner(
                 path=path,
                 args=config.args,
