@@ -90,7 +90,7 @@ class RunnerManager:
     def reload_runner(self, path: str):
         runner = self.get_runner(path)
         config_path = str(Path(path).parent)
-        config = get_runner_config(config_path)
+        config = get_runner_config(config_path, self.default_runner_config_path)
         need_stop = False
         need_start = False
 
