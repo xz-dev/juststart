@@ -1,3 +1,4 @@
+import asyncio
 import subprocess
 from pathlib import Path
 from .errors import RunnerError
@@ -9,7 +10,7 @@ class Runner:
         path: str,
         args: list[str],
         env: dict,
-        auto_restart: bool,
+        auto_restart: float,
         stdin: str,
         stdout: str,
         stderr: str,
@@ -31,7 +32,25 @@ class Runner:
         self.stdout_io = None
         self.stderr_io = None
 
-    def start(self):
+    def start(self, loop: asyncio.AbstractEventLoop):
+        self._start()
+        self.start_monitoring(loop)
+
+    def start_monitoring(self, loop: asyncio.AbstractEventLoop):
+        async def monitor():
+            while True:
+                if self.auto_restart < 0:
+                    break
+                if not self.is_running():
+                    if self.auto_restart > 0:
+                        await asyncio.sleep(self.auto_restart)
+                    await asyncio.to_thread(self._start)
+                await asyncio.sleep(0.1)
+
+        future = asyncio.run_coroutine_threadsafe(monitor(), loop)
+        return future
+
+    def _start(self):
         if self.is_running():
             raise RunnerError(f"Process is already running")
         self.stdin_io = open(self.stdin, "a+")
@@ -113,7 +132,7 @@ class Runner:
     @property
     def status_str(self) -> str:
         if self.process:
-            if elf.process.poll() is None:
+            if self.process.poll() is None:
                 status = "Running"
                 returncode_str = f"last returncode: {self.returncode}"
             else:

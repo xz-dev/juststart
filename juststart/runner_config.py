@@ -44,7 +44,7 @@ def get_runner_config(path, default_config: RunnerConfig = None):
             args = f.readlines()
     except FileNotFoundError:
         args = []
-    auto_restart = True
+    auto_restart = 0
     stdin = parent / "stdin"
     stdout = parent / "stdout"
     stderr = parent / "stderr"
@@ -59,9 +59,13 @@ def get_runner_config(path, default_config: RunnerConfig = None):
     for config in config_list:
         try:
             auto_restart = __get_single_config("auto_restart", config)
-            if type(auto_restart) != bool:
+            if auto_restart == False:
+                auto_restart = -1
+            if type(auto_restart) == str:
+                auto_restart = float(auto_restart)
+            else:
                 raise RunnerConfigError(
-                    "auto_restart must be -auto_restart or auto_restart"
+                    "auto_restart must be -auto_restart or auto_restart or auto_restart=<seconds>"
                 )
         except KeyError:
             pass

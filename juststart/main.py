@@ -7,7 +7,7 @@ from .cli_utils import (
     get_password_from_config_path,
     runner_status_dict_to_str,
 )
-from .daemon import get_objs, run_deamon
+from .daemon import get_objs, run_deamon, Utils
 from .errors import BaseError
 from .runner_manager import RunnerManager
 from .runner_manager_config import RunnerManagerConfig
@@ -120,11 +120,12 @@ def main():
             if config_path:
                 run_deamon(args.address, args.port, password, config_path)
                 return
-        runner_manager, manager_config = get_objs(
+        runner_manager, manager_config, utils = get_objs(
             address=args.address, port=args.port, password=password
         )
         runner_manager: RunnerManager
         manager_config: RunnerManagerConfig
+        uitls: Utils
         if command == "list":
             print(runner_status_dict_to_str(runner_manager.get_runner_status_dict()))
         elif command == "gc":
@@ -149,7 +150,7 @@ def main():
                 elif command == "reload_config":
                     runner_manager.reload_runner(path)
                 elif command == "status":
-                    print(runner_manager.get_runner(path).status)
+                    print(utils.get_runner_status(path))
                 else:
                     logging.error("Unknown command")
                     return

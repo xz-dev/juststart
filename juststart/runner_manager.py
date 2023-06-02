@@ -1,5 +1,8 @@
 import logging
+from threading import Thread
 from pathlib import Path
+from asyncio import new_event_loop
+from concurrent.futures import ThreadPoolExecutor
 
 from .errors import RunnerError
 from .runner import Runner
@@ -22,6 +25,11 @@ class RunnerManagerStatus:
 
 class RunnerManager:
     def __init__(self, runner_list_file_path, default_runner_config_path):
+        monitor_executor = ThreadPoolExecutor()
+        self.loop = new_event_loop()
+        self.loop.set_default_executor(monitor_executor)
+        self.start_manager()
+
         self.default_runner_config_path = default_runner_config_path
         self.manager_config = RunnerManagerConfig(runner_list_file_path)
         self.runner_dict = dict()
@@ -32,6 +40,18 @@ class RunnerManager:
         for path, enabled in self.manager_config.runner_info_dict.items():
             if enabled:
                 self.start_runner(path)
+
+    def start_manager(self):
+        def run_event_loop(loop):
+            loop.run_forever()
+
+        self.event_loop_thread = Thread(target=run_event_loop, args=(self.loop,))
+        self.event_loop_thread.start()
+
+    def stop_manager(self):
+        self.loop.call_soon_threadsafe(self.loop.stop)
+        self.event_loop_thread.join()
+        self.loop.close()
 
     def get_runner_status_dict(self) -> dict[str, set[RunnerManagerStatus]]:
         runner_status_dict = {}
@@ -50,7 +70,7 @@ class RunnerManager:
                     status_list.add(RunnerManagerStatus.NOT_RUNNING)
             except RunnerError:
                 status_list.add(RunnerManagerStatus.NOT_INITED)
-            runner_status_dict[path] = status_list
+            runner_status_dict[path] = sorted(status_list)
         for runner in self.runner_dict.values():
             try:
                 status_list = runner_status_dict[runner.path]
@@ -61,7 +81,8 @@ class RunnerManager:
                 status_list.add(RunnerManagerStatus.RUNNING)
             else:
                 status_list.add(RunnerManagerStatus.NOT_RUNNING)
-        return runner_status_dict
+            runner_status_dict[runner.path] = sorted(status_list)
+        return sorted(runner_status_dict)
 
     def reload_runner(self, path: str):
         runner = self.get_runner(path)
@@ -88,7 +109,7 @@ class RunnerManager:
             runner.stderr = config.stderr
 
         if need_start:
-            runner.start()
+            runner.start(self.loop)
 
     def get_runner(self, path) -> Runner:
         try:
@@ -126,7 +147,7 @@ class RunnerManager:
                 stderr=config.stderr,
             )
             self.runner_dict[path] = runner
-        runner.start()
+        runner.start(self.loop)
 
     def clean_runner(self):
         for path, runner in self.runner_dict.items():
