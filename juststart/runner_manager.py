@@ -192,7 +192,7 @@ class RunnerManager:
         self.runner_dict[path] = runner
         return runner
 
-    def stop_runner(self, path):
+    def stop_runner(self, path, check_running: bool = False):
         runner = self.get_runner(path)
         try:
             down_runner_path = f"{path}.down"
@@ -204,11 +204,12 @@ class RunnerManager:
             while down_runner.is_running() and wait_count > 0:
                 time.sleep(1)
                 wait_count -= 1
-            self.stop_runner(down_runner.path)
-            self._pop_runner(down_runner)
-        except ManagerConfigError:
+            self.stop_runner(down_runner.path, check_running=True)
+        except ManagerConfigError or RunnerError:
             pass
-        runner.stop()
+        # Stop the runner if check_running is False or the runner is running
+        if not check_running or (check_running and runner.is_running()):
+            runner.stop()
         self._pop_runner(runner)
 
     def _pop_runner(self, runner):

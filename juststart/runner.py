@@ -128,7 +128,7 @@ class Runner:
 
     def stop(self):
         if not self.is_running():
-            raise RunnerError(f"Process is not running")
+            raise RunnerError(f"{self.path} is not running")
         self._shutdown()
         self.returncode = self.process.returncode
         if self.stdin_io and not self.stdin_io.closed:
