@@ -3,6 +3,7 @@ from asyncio import new_event_loop
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Thread
+from .config import enable_compatible_runit
 
 from .errors import ManagerConfigError, RunnerError
 from .runner import Runner
@@ -196,6 +197,8 @@ class RunnerManager:
         runner = self.get_runner(path)
         try:
             down_runner_path = f"{path}.down"
+            if "down" in enable_compatible_runit:
+                down_runner_path = f"{Path(path).parent / 'down'}"
             RunnerManagerConfig._check_runner(down_runner_path)
             config = self._get_config_from_runner(runner)
             logging.info(f"Pre-run {down_runner_path}")
