@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 
 from .cli_utils import *
-from .daemon import Utils, get_objs, run_deamon
+from .daemon import Utils, connect_manager, get_objs, run_deamon
 from .errors import BaseError
 from .runner_manager import RunnerManager
 from .runner_manager_config import RunnerManagerConfig
@@ -44,7 +44,7 @@ def main():
         help="Path to config file",
     )
     # juststart deamon
-    subparsers.add_parser("serve", help="Run as a server")
+    subparsers.add_parser("serve", help="Run as a daemon")
 
     # juststart add <path>
     add_parser = subparsers.add_parser("add", help="Add a service")
@@ -80,12 +80,20 @@ def main():
     )
     reload_config_parser.add_argument("path")
 
-    # juststart list
-    status_parser = subparsers.add_parser("list", help="List all services")
-
     # juststart status <path>
     status_parser = subparsers.add_parser("status", help="Status of a service")
     status_parser.add_argument("path")
+
+    # juststart list
+    status_parser = subparsers.add_parser("list", help="List all services")
+    # juststart gc
+    status_parser = subparsers.add_parser(
+        "gc", help="Garbage collect for stoped runners"
+    )
+
+    # juststart shutdown
+    status_parser = subparsers.add_parser("shutdown", help="Shutdown Daemon")
+
     args = parser.parse_args()
 
     def get_config_path() -> str or None:
@@ -116,23 +124,27 @@ def main():
             if config_path:
                 run_deamon(args.address, args.port, password, config_path)
                 return
-        runner_manager, manager_config, utils = get_objs(
+
+        share_manager = connect_manager(
             address=args.address, port=args.port, password=password
         )
+        runner_manager, manager_config, utils = get_objs(share_manager)
         runner_manager: RunnerManager
         manager_config: RunnerManagerConfig
         uitls: Utils
-        if command == "list":
+        if command == "shutdown":
+            utils.shutdown()
+        elif command == "list":
             print(runner_status_dict_to_str(runner_manager.get_runner_status_dict()))
         elif command == "gc":
-            runner_manager.clean_runner()
+            print("\n".join(runner_manager.clean_runner()))
         else:
             path = get_absolute_path(args.path)
             try:
                 if command == "add":
                     manager_config.add_runner(path)
                 elif command == "del":
-                    manager_config.del_runner(path)
+                    manager_config.delete_runner(path)
                 elif command == "enable":
                     manager_config.enable_runner(path)
                 elif command == "disable":

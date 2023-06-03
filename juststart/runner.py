@@ -11,7 +11,7 @@ class Runner:
         path: str,
         args: list[str],
         env: dict,
-        auto_restart: float,
+        auto_restart: int,
         stdin: str,
         stdout: str,
         stderr: str,
@@ -46,14 +46,11 @@ class Runner:
             if self.boot_lock.locked():
                 return
             async with self.boot_lock:
-                while True:
+                while self.auto_restart >= 0:
                     await self._check_blocker_list()
                     if not self.is_running():
-                        if self.auto_restart > 0:
-                            await asyncio.sleep(self.auto_restart)
                         await asyncio.to_thread(self._start)
-                    if self.auto_restart < 0:
-                        break
+                        self.auto_restart -= 1
                     await asyncio.sleep(0.1)
 
         future = asyncio.run_coroutine_threadsafe(monitor(), loop)
@@ -112,11 +109,26 @@ class Runner:
         )
         self.booted_num += 1
 
+    def _shutdown(self):
+        self.process.terminate()
+        try:
+            self.process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+        try:
+            self.process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            import os
+            os.kill(self.process.pid, signal.SIGKILL)
+        try:
+            self.process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            logger.error(f"Failed to kill process {self.process.pid}")
+
     def stop(self):
         if not self.is_running():
             raise RunnerError(f"Process is not running")
-        self.process.terminate()
-        self.process.wait()
+        self._shutdown()
         self.returncode = self.process.returncode
         if self.stdin_io and not self.stdin_io.closed:
             self.stdin_io.close()

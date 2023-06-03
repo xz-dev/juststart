@@ -9,7 +9,7 @@ from .errors import RunnerConfigError
 class RunnerConfig:
     args: list[str]
     env: dict
-    auto_restart: float
+    auto_restart: int
     stdin: str
     stdout: str
     stderr: str
@@ -58,7 +58,7 @@ def get_default_config(work_path: Path, std_path: Path):
     return RunnerConfig(
         args=[],
         env={},
-        auto_restart=0,
+        auto_restart=1,
         stdin=std_path / "in",
         stdout=std_path / "log",
         stderr=std_path / "log",
@@ -84,7 +84,7 @@ def read_runner_config(path: Path, env={}) -> RunnerConfig:
                     if auto_restart == False:
                         auto_restart = -1
                     if type(auto_restart) == str:
-                        auto_restart = float(auto_restart)
+                        auto_restart = int(auto_restart)
                     else:
                         raise RunnerConfigError(
                             "auto_restart must be -auto_restart or auto_restart or auto_restart=<seconds>"
@@ -148,7 +148,7 @@ def get_runner_config(
 ) -> RunnerConfig:
     default_config_path = Path(default_config_path)
     work_path = Path(work_path)
-    tmp_dir_path = Path(tmp_dir_path) / work_path
+    tmp_dir_path = Path(f"{tmp_dir_path}/{work_path}")
     if any(default_config_path.iterdir()):
         base_config = read_runner_config(default_config_path)
     else:

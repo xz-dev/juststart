@@ -12,27 +12,34 @@ from .runner_manager_config import RunnerManagerConfig
 class MyManager(BaseManager):
     pass
 
+shutdown = False
 
 class Utils:
-    def __init__(self, manager: RunnerManager):
-        self.manager = manager
+    def __init__(self, runner_manager: RunnerManager):
+        self.runner_manager = runner_manager
 
     def get_runner_status(self, path: str) -> str:
-        return self.manager.get_runner(path).status_str
+        return self.runner_manager.get_runner(path).status_str
+
+    def shutdown(self):
+        global shutdown
+        shutdown = True
 
 
 def get_manager(address: tuple[str, int], authkey: bytes) -> BaseManager:
     return MyManager(address=address, authkey=authkey)
 
 
-def get_objs(
-    address: str, port: int, password: bytes
-) -> tuple[RunnerManager, RunnerManagerConfig, Utils]:
+def connect_manager(address: str, port: int, password: bytes) -> MyManager:
     MyManager.register("get_runner_manager")
     MyManager.register("get_runner_manager_config")
     MyManager.register("get_utils")
     manager = get_manager(address=(address, port), authkey=password)
     manager.connect()
+    return manager
+
+
+def get_objs(manager: MyManager) -> tuple[RunnerManager, RunnerManagerConfig, Utils]:
     return (
         manager.get_runner_manager(),
         manager.get_runner_manager_config(),
@@ -64,7 +71,9 @@ def run_deamon(address: str, port: int, password: bytes, config_dir_path: str):
     lock_file_path = tmp_dir_path / "lock"
     if lock_file_path.exists():
         logging.error("Daemon is already running or tmp directory exists")
-        logging.error("If you want continue run daemon, please delete %s", lock_file_path)
+        logging.error(
+            "If you want continue run daemon, please delete %s", lock_file_path
+        )
         return
     lock_file_path.touch()
     runner_manager = RunnerManager(
@@ -74,7 +83,6 @@ def run_deamon(address: str, port: int, password: bytes, config_dir_path: str):
     )
     utils = Utils(runner_manager)
     logging.warning("runner_manager: %s", runner_manager)
-
     MyManager.register("get_runner_manager", lambda: runner_manager)
     MyManager.register(
         "get_runner_manager_config", lambda: runner_manager.manager_config
@@ -86,8 +94,9 @@ def run_deamon(address: str, port: int, password: bytes, config_dir_path: str):
     server_thread = Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
     try:
-        while server_thread.is_alive():
+        while server_thread.is_alive() and not shutdown:
             server_thread.join(timeout=1)
+        logging.warning("Client ask shutdown")
     except KeyboardInterrupt:
         pass
     finally:

@@ -51,6 +51,15 @@ class RunnerManager:
             else:
                 logging.info(f"Runner {path} checked")
 
+    def _unload_runners(self):
+        for runner in self.runner_dict.values():
+            try:
+                self.stop_runner(runner.path)
+                logging.info(f"Runner {runner.path} stopped")
+            except RunnerError:
+                logging.info(f"Runner {runner.path} had stopped")
+        self.clean_runner()
+
     def start_manager(self):
         def run_event_loop(loop):
             loop.run_forever()
@@ -59,6 +68,7 @@ class RunnerManager:
         self.event_loop_thread.start()
 
     def stop_manager(self):
+        self._unload_runners()
         self.loop.call_soon_threadsafe(self.loop.stop)
         self.event_loop_thread.join()
         self.loop.close()
@@ -176,12 +186,18 @@ class RunnerManager:
             self.runner_dict[path] = runner
         self._start_runner(runner)
 
-    def clean_runner(self):
+    def clean_runner(self) -> list[str]:
+        new_runner_dict = {}
+        removed_runner_list = []
         for path, runner in self.runner_dict.items():
             if not runner.is_running():
                 config = self._get_config_from_runner(runner)
                 self._destroy_runner_runtime(config)
-                self.runner_dict.pop(path)
+                removed_runner_list.append(path)
+            else:
+                new_runner_dict[path] = runner
+        self.runner_dict = new_runner_dict
+        return removed_runner_list
 
     def stop_runner(self, path):
         runner = self.get_runner(path)
