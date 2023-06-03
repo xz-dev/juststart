@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Thread
 
-from .errors import RunnerError
+from .errors import ManagerConfigError, RunnerError
 from .runner import Runner
 from .runner_config import RunnerConfig, get_runner_config
 from .runner_manager_config import RunnerManagerConfig
@@ -52,12 +52,12 @@ class RunnerManager:
                 logging.info(f"Runner {path} checked")
 
     def _unload_runners(self):
-        for runner in self.runner_dict.values():
+        for path in list(self.runner_dict.keys()):
             try:
-                self.stop_runner(runner.path)
-                logging.info(f"Runner {runner.path} stopped")
+                self.stop_runner(path)
+                logging.info(f"Runner {path} stopped")
             except RunnerError:
-                logging.info(f"Runner {runner.path} had stopped")
+                logging.info(f"Runner {path} had stopped")
         self.clean_runner()
 
     def start_manager(self):
@@ -159,53 +159,62 @@ class RunnerManager:
                 f"Runner at {path} is not in memory, which means it is never started or been gc"
             )
 
+    def clean_runner(self):
+        deleted_runner_list = []
+        for path, runner in list(self.runner_dict.items()):
+            if not runner.is_running():
+                self._pop_runner(runner)
+                deleted_runner_list.append(path)
+        return deleted_runner_list
+
     def restart_runner(self, path):
         try:
-            runner = self.get_runner(path)
-            runner.stop()
+            self.stop_runner(path)
         except RunnerError as e:
             logging.info(e.message)
         self.start_runner(path)
 
-    def start_runner(self, path):
-        try:
-            runner = self.get_runner(path)
-            self.reload_runner(path)
-        except RunnerError:
-            config_path = str(Path(path).parent)
+    def start_runner(self, path, config: RunnerConfig = None) -> Runner:
+        config_path = str(Path(path).parent)
+        if config is None:
             config = self._get_runner_config(config_path)
-            runner = Runner(
-                path=path,
-                args=config.args,
-                env=config.env,
-                auto_restart=config.auto_restart,
-                stdin=config.stdin,
-                stdout=config.stdout,
-                stderr=config.stderr,
-            )
-            self.runner_dict[path] = runner
-        self._start_runner(runner)
-
-    def clean_runner(self) -> list[str]:
-        new_runner_dict = {}
-        removed_runner_list = []
-        for path, runner in self.runner_dict.items():
-            if not runner.is_running():
-                config = self._get_config_from_runner(runner)
-                self._destroy_runner_runtime(config)
-                removed_runner_list.append(path)
-            else:
-                new_runner_dict[path] = runner
-        self.runner_dict = new_runner_dict
-        return removed_runner_list
+        runner = Runner(
+            path=path,
+            args=config.args,
+            env=config.env,
+            auto_restart=config.auto_restart,
+            stdin=config.stdin,
+            stdout=config.stdout,
+            stderr=config.stderr,
+        )
+        self._init_runner_runtime(self._get_config_from_runner(runner))
+        runner.start(self.loop)
+        self.runner_dict[path] = runner
+        return runner
 
     def stop_runner(self, path):
         runner = self.get_runner(path)
+        try:
+            down_runner_path = f"{path}.down"
+            RunnerManagerConfig._check_runner(down_runner_path)
+            config = self._get_config_from_runner(runner)
+            logging.info(f"Pre-run {down_runner_path}")
+            down_runner = self.start_runner(down_runner_path, config=config)
+            wait_count = 5
+            while down_runner.is_running() and wait_count > 0:
+                time.sleep(1)
+                wait_count -= 1
+            self.stop_runner(down_runner.path)
+            self._pop_runner(down_runner)
+        except ManagerConfigError:
+            pass
         runner.stop()
+        self._pop_runner(runner)
 
-    def _start_runner(self, runner: Runner):
-        self._init_runner_runtime(self._get_config_from_runner(runner))
-        runner.start(self.loop)
+    def _pop_runner(self, runner):
+        config = self._get_config_from_runner(runner)
+        self._destroy_runner_runtime(config)
+        del self.runner_dict[runner.path]
 
     @staticmethod
     def _init_runner_runtime(config: RunnerConfig):
@@ -218,9 +227,6 @@ class RunnerManager:
 
     def _destroy_runner_runtime(self, config: RunnerConfig):
         tmp_path = Path(self.tmp_dir_path) / "runner"
-        if is_parent_directory(Path(config.stdin), tmp_path):
-            delete_directory_and_empty_parents(Path(config.stdin).parent, tmp_path)
-        if is_parent_directory(Path(config.stdout), tmp_path):
-            delete_directory_and_empty_parents(Path(config.stdout).parent, tmp_path)
-        if is_parent_directory(Path(config.stderr), tmp_path):
-            delete_directory_and_empty_parents(Path(config.stderr).parent, tmp_path)
+        delete_directory_and_empty_parents(Path(config.stdin).parent, tmp_path)
+        delete_directory_and_empty_parents(Path(config.stdout).parent, tmp_path)
+        delete_directory_and_empty_parents(Path(config.stderr).parent, tmp_path)

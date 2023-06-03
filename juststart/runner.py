@@ -46,7 +46,8 @@ class Runner:
             if self.boot_lock.locked():
                 return
             async with self.boot_lock:
-                while self.auto_restart >= 0:
+                self.auto_restart += 1
+                while self.auto_restart > 0:
                     await self._check_blocker_list()
                     if not self.is_running():
                         await asyncio.to_thread(self._start)

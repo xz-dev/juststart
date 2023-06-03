@@ -15,18 +15,22 @@ class RunnerConfig:
     stderr: str
 
     def plus(self, other: "RunnerConfig") -> "RunnerConfig":
-        args = self.args
-        for arg in self.other:
-            if arg[:2] == "- " and arg[2:] in args:
-                args.remove(arg[2:])
-            args.append(arg)
+        args = other.args
+        for arg in args:
+            if arg[:1] == "-" and arg[1:]:
+                arg_key = arg[1:].strip()
+                if arg_key in self.args:
+                    self.args.remove(arg[1:])
+                elif arg_key == "*":
+                    self.args = []
+            self.args.append(arg)
         return RunnerConfig(
-            args=args,
-            env=other.env,
+            args=self.args,
+            env=self.env | other.env,
             auto_restart=other.auto_restart,
-            stdin=other.stdin,
-            stdout=other.stdout,
-            stderr=other.stderr,
+            stdin=other.stdin if other.stdin else self.stdin,
+            stdout=other.stdout if other.stdout else self.stdout,
+            stderr=other.stderr if other.stderr else self.stderr,
         )
 
 
@@ -39,18 +43,11 @@ def __get_runner_config(path) -> list[str]:
 
 
 def __get_single_config(key: str, config: str):
-    if config[:6] == f"-{key}":
+    if config.startswith(f"-{key}="):
         return False
-    elif config[: len(key)] == key:
-        return config[6:].split("=", maxsplit=1)
-        if split == 2:
-            return split[1:] if split[1:] == " " else split
-        else:
-            if default_enable_value is not None:
-                return default_enable_value
-            else:
-                return True
-    raise KeyError
+    elif config.startswith(key + "="):
+        return config[len(key) + 1 :].strip()
+    return None
 
 
 def get_default_config(work_path: Path, std_path: Path):
@@ -78,48 +75,25 @@ def read_runner_config(path: Path, env={}) -> RunnerConfig:
     stderr = None
     try:
         with open(path / "config") as f:
-            for line in r.readline():
-                try:
-                    auto_restart = __get_single_config("auto_restart", line)
-                    if auto_restart == False:
-                        auto_restart = -1
-                    if type(auto_restart) == str:
-                        auto_restart = int(auto_restart)
+            for line in r.readlines():
+                auto_restart_value = __get_single_config("auto_restart", line)
+                if auto_restart_value is not None:
+                    if auto_restart_value == False:
+                        auto_restart = 0
                     else:
-                        raise RunnerConfigError(
-                            "auto_restart must be -auto_restart or auto_restart or auto_restart=<seconds>"
-                        )
-                except KeyError:
-                    pass
-                try:
-                    stdin = __get_single_config("stdin", line)
-                    if stdin == False:
-                        stdin = None
-                    elif type(stdin) != str:
-                        raise RunnerConfigError("stdin must be -stdin or stdin=<path>")
-                except KeyError:
-                    pass
-                try:
-                    stdout = __get_single_config("stdout", line)
-                    if stdout == False:
-                        stdout = None
-                    elif type(stdout) != str:
-                        raise RunnerConfigError(
-                            "stdout must be -stdout or stdout=<path>"
-                        )
-                except KeyError:
-                    pass
-                try:
-                    stderr = __get_single_config("stderr", line)
-                    if stderr == False:
-                        stderr = None
-                    elif type(stderr) != str:
-                        raise RunnerConfigError(
-                            "stderr must be -stderr or stderr=<path>"
-                        )
-                except KeyError:
-                    pass
+                        auto_restart = int(auto_restart_value)
+                stdin_value = __get_single_config("stdin", line)
+                if stdin_value is not None:
+                    stdin = stdin_value if stdin_value != False else None
+                stdout_value = __get_single_config("stdout", line)
+                if stdout_value is not None:
+                    stdout = stdout_value if stdout_value != False else None
+                stderr_value = __get_single_config("stderr", line)
+                if stderr_value is not None:
+                    stderr = stderr_value if stderr_value != False else None
     except FileNotFoundError:
+        pass
+    except IsADirectoryError:
         pass
     return RunnerConfig(
         args=args,
@@ -132,15 +106,21 @@ def read_runner_config(path: Path, env={}) -> RunnerConfig:
 
 
 def _get_runner_config(work_path: Path, base_config: RunnerConfig) -> RunnerConfig:
-    parent = work_path.parent
-    if (
-        (parent / "args").exists()
-        or (parent / "env").exists()
-        or (parent / "conf").exists()
-    ):
-        return base_config.plus(read_runner_config(work_path, env=base_config.env))
-    else:
+    if work_path == work_path.parent:
+        # We reached the root directory
         return base_config
+
+    parent_config = _get_runner_config(work_path.parent, base_config)
+
+    if (
+        (work_path / "args").exists()
+        or (work_path / "env").exists()
+        or (work_path / "config").exists()
+    ):
+        current_config = read_runner_config(work_path, env=parent_config.env)
+        return parent_config.plus(current_config)
+    else:
+        return parent_config
 
 
 def get_runner_config(
@@ -149,8 +129,9 @@ def get_runner_config(
     default_config_path = Path(default_config_path)
     work_path = Path(work_path)
     tmp_dir_path = Path(f"{tmp_dir_path}/{work_path}")
+    default_config = get_default_config(work_path, std_path=tmp_dir_path / "std")
     if any(default_config_path.iterdir()):
-        base_config = read_runner_config(default_config_path)
+        base_config = read_runner_config(default_config_path).plus(default_config)
     else:
-        base_config = get_default_config(work_path, std_path=tmp_dir_path / "std")
+        base_config = default_config
     return _get_runner_config(work_path, base_config)

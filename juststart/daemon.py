@@ -12,7 +12,9 @@ from .runner_manager_config import RunnerManagerConfig
 class MyManager(BaseManager):
     pass
 
+
 shutdown = False
+
 
 class Utils:
     def __init__(self, runner_manager: RunnerManager):
@@ -62,6 +64,8 @@ async def cancel_all_tasks():
 
 
 def run_deamon(address: str, port: int, password: bytes, config_dir_path: str):
+    global shutdown
+    shutdown = False
     config_dir = Path(config_dir_path)
     runner_list_file_path = config_dir / "runner_list"
     default_runner_config_file_path = config_dir / "default"
