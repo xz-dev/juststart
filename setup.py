@@ -42,8 +42,8 @@ setup(
     python_requires=">=3.7",
     entry_points={
         "console_scripts": [
-            "juststart = juststart.main:main",
-            "jst = juststart.main:main",
+            "juststart = juststart.__main__:run",
+            "jst = juststart.__main__:run",
         ],
     },
     install_requires=[],

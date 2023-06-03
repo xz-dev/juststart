@@ -53,16 +53,15 @@ def __get_single_config(key: str, config: str):
     raise KeyError
 
 
-def get_default_config(work_path: Path):
+def get_default_config(work_path: Path, std_path: Path):
     path = Path(work_path)
-    std = path / "std"
     return RunnerConfig(
         args=[],
         env={},
         auto_restart=0,
-        stdin=std / "in",
-        stdout=std / "log",
-        stderr=std / "log",
+        stdin=std_path / "in",
+        stdout=std_path / "log",
+        stderr=std_path / "log",
     )
 
 
@@ -144,11 +143,14 @@ def _get_runner_config(work_path: Path, base_config: RunnerConfig) -> RunnerConf
         return base_config
 
 
-def get_runner_config(work_path: str, default_config_path: str) -> RunnerConfig:
+def get_runner_config(
+    work_path: str, default_config_path: str, tmp_dir_path: str
+) -> RunnerConfig:
     default_config_path = Path(default_config_path)
     work_path = Path(work_path)
-    if default_config_path.exists():
+    tmp_dir_path = Path(tmp_dir_path) / work_path
+    if any(default_config_path.iterdir()):
         base_config = read_runner_config(default_config_path)
     else:
-        base_config = get_default_config(work_path)
+        base_config = get_default_config(work_path, std_path=tmp_dir_path / "std")
     return _get_runner_config(work_path, base_config)

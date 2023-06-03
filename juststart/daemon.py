@@ -2,6 +2,7 @@ import asyncio
 import logging
 from multiprocessing.managers import BaseManager
 from pathlib import Path
+from threading import Thread
 
 from .errors import BaseError
 from .runner_manager import RunnerManager
@@ -43,7 +44,7 @@ def test_is_running(address: str, port: int, password: bytes):
     try:
         get_objs(address, port, password)
         return True
-    except ConnectionRefusedError:
+    except:
         return False
 
 
@@ -54,16 +55,22 @@ async def cancel_all_tasks():
 
 
 def run_deamon(address: str, port: int, password: bytes, config_dir_path: str):
-    if test_is_running(address, port, password):
-        logging.error("Daemon is already running")
-        return
     config_dir = Path(config_dir_path)
     runner_list_file_path = config_dir / "runner_list"
     default_runner_config_file_path = config_dir / "default"
     default_runner_config_file_path.mkdir(parents=True, exist_ok=True)
+    tmp_dir_path = config_dir / "runtime_tmp"
+    tmp_dir_path.mkdir(parents=True, exist_ok=True)
+    lock_file_path = tmp_dir_path / "lock"
+    if lock_file_path.exists():
+        logging.error("Daemon is already running or tmp directory exists")
+        logging.error("If you want continue run daemon, please delete %s", lock_file_path)
+        return
+    lock_file_path.touch()
     runner_manager = RunnerManager(
         runner_list_file_path=str(runner_list_file_path),
         default_runner_config_path=str(default_runner_config_file_path),
+        tmp_dir_path=str(tmp_dir_path),
     )
     utils = Utils(runner_manager)
     logging.warning("runner_manager: %s", runner_manager)
@@ -76,12 +83,18 @@ def run_deamon(address: str, port: int, password: bytes, config_dir_path: str):
     manager = get_manager(address=(address, port), authkey=password)
     server = manager.get_server()
     logging.warning("server: address=%s, port=%s", address, port)
+    server_thread = Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
     try:
-        server.serve_forever()
+        while server_thread.is_alive():
+            server_thread.join(timeout=1)
     except KeyboardInterrupt:
         pass
     finally:
         logging.warning("Shutting down the server...")
         asyncio.run(cancel_all_tasks())
         runner_manager.stop_manager()
-        logging.warning("Server stopped. Bye!")
+        logging.warning("Server stopped")
+        lock_file_path.unlink()
+        logging.warning("Lock file deleted")
+        logging.warning("Bye!")

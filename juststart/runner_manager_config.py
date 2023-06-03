@@ -26,12 +26,8 @@ class RunnerManagerConfig:
                 is_enabled = runners_info[path]
                 f.write(f"{path}\n" if is_enabled else f"- {path}\n")
 
-    def add_runner(self, path):
-        runners_info = self.runner_info_dict
-        if path in runners_info:
-            raise ManagerConfigError(
-                f"{path} is already added { 'enabled' if runners_info[path] else 'disabled' }"
-            )
+    @staticmethod
+    def _check_runner(path):
         if os.path.isdir(path):
             raise ManagerConfigError(f"{path} is a directory")
         if not os.path.exists(path):
@@ -42,6 +38,14 @@ class RunnerManagerConfig:
             raise ManagerConfigError(
                 f"{path} is not executable or not have running permission"
             )
+
+    def add_runner(self, path):
+        runners_info = self.runner_info_dict
+        if path in runners_info:
+            raise ManagerConfigError(
+                f"{path} is already added { 'enabled' if runners_info[path] else 'disabled' }"
+            )
+        self._check_runner(path)
         runners_info[path] = False
         self.runner_info_dict = runners_info
 

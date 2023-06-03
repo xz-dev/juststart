@@ -43,6 +43,8 @@ class Runner:
 
     def start_monitoring(self, loop: asyncio.AbstractEventLoop):
         async def monitor():
+            if self.boot_lock.locked():
+                return
             async with self.boot_lock:
                 while True:
                     await self._check_blocker_list()

@@ -1,11 +1,13 @@
 import logging
 from pathlib import Path
 
+from .errors import ManagerConfigError
 from .runner_manager import RunnerManagerStatus
+from .runner_manager_config import RunnerManagerConfig
 
 
 def get_password_from_config_path(config_path: str) -> bytes:
-    password_path = Path(config_path).parent / "password"
+    password_path = Path(config_path) / "password"
     try:
         with open(password_path, "rb") as f:
             return f.read()
@@ -47,6 +49,10 @@ def runner_status_dict_to_str(
             result_list.append("boot")
         if len(result_list) == 1:
             result_list.append("[idle]")
+        try:
+            RunnerManagerConfig._check_runner(path)
+        except ManagerConfigError:
+            result_list.append("[broken]")
         result_list.append("\n")
         result += " ".join(result_list)
     return result[:-1]

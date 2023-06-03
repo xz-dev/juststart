@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 
+import logging
+
 from .main import main
 
-if __name__ == '__main__':
+
+def run():
+    logging.basicConfig(level=logging.INFO)
     main()
+
+
+if __name__ == "__main__":
+    run()

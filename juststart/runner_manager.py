@@ -6,8 +6,9 @@ from threading import Thread
 
 from .errors import RunnerError
 from .runner import Runner
-from .runner_config import get_runner_config
+from .runner_config import RunnerConfig, get_runner_config
 from .runner_manager_config import RunnerManagerConfig
+from .utils import delete_directory_and_empty_parents, is_parent_directory
 
 
 class RunnerManagerStatus:
@@ -24,13 +25,19 @@ class RunnerManagerStatus:
 
 
 class RunnerManager:
-    def __init__(self, runner_list_file_path, default_runner_config_path):
+    def __init__(
+        self,
+        runner_list_file_path: str,
+        default_runner_config_path: str,
+        tmp_dir_path: str,
+    ):
         monitor_executor = ThreadPoolExecutor()
         self.loop = new_event_loop()
         self.loop.set_default_executor(monitor_executor)
         self.start_manager()
 
         self.default_runner_config_path = default_runner_config_path
+        self.tmp_dir_path = tmp_dir_path
         self.manager_config = RunnerManagerConfig(runner_list_file_path)
         self.runner_dict = dict()
         self._load_runners()
@@ -40,6 +47,9 @@ class RunnerManager:
         for path, enabled in self.manager_config.runner_info_dict.items():
             if enabled:
                 self.start_runner(path)
+                logging.info(f"Runner {path} booted")
+            else:
+                logging.info(f"Runner {path} checked")
 
     def start_manager(self):
         def run_event_loop(loop):
@@ -87,10 +97,27 @@ class RunnerManager:
             sorted_status_dict[path] = sorted(status_list)
         return sorted_status_dict
 
+    def _get_runner_config(self, config_path: str) -> RunnerConfig:
+        return get_runner_config(
+            config_path,
+            self.default_runner_config_path,
+            Path(self.tmp_dir_path) / "runner",
+        )
+
+    def _get_config_from_runner(self, runner: Runner) -> RunnerConfig:
+        return RunnerConfig(
+            args=runner.args,
+            env=runner.env,
+            auto_restart=runner.auto_restart,
+            stdin=runner.stdin,
+            stdout=runner.stdout,
+            stderr=runner.stderr,
+        )
+
     def reload_runner(self, path: str):
         runner = self.get_runner(path)
         config_path = str(Path(path).parent)
-        config = get_runner_config(config_path, self.default_runner_config_path)
+        config = self._get_runner_config(config_path)
         need_stop = False
         need_start = False
 
@@ -136,7 +163,7 @@ class RunnerManager:
             self.reload_runner(path)
         except RunnerError:
             config_path = str(Path(path).parent)
-            config = get_runner_config(config_path, self.default_runner_config_path)
+            config = self._get_runner_config(config_path)
             runner = Runner(
                 path=path,
                 args=config.args,
@@ -147,13 +174,37 @@ class RunnerManager:
                 stderr=config.stderr,
             )
             self.runner_dict[path] = runner
-        runner.start(self.loop)
+        self._start_runner(runner)
 
     def clean_runner(self):
         for path, runner in self.runner_dict.items():
             if not runner.is_running():
+                config = self._get_config_from_runner(runner)
+                self._destroy_runner_runtime(config)
                 self.runner_dict.pop(path)
 
     def stop_runner(self, path):
         runner = self.get_runner(path)
         runner.stop()
+
+    def _start_runner(self, runner: Runner):
+        self._init_runner_runtime(self._get_config_from_runner(runner))
+        runner.start(self.loop)
+
+    @staticmethod
+    def _init_runner_runtime(config: RunnerConfig):
+        Path(config.stdin).parent.mkdir(parents=True, exist_ok=True)
+        Path(config.stdin).touch()
+        Path(config.stdout).parent.mkdir(parents=True, exist_ok=True)
+        Path(config.stdout).touch()
+        Path(config.stderr).parent.mkdir(parents=True, exist_ok=True)
+        Path(config.stderr).touch()
+
+    def _destroy_runner_runtime(self, config: RunnerConfig):
+        tmp_path = Path(self.tmp_dir_path) / "runner"
+        if is_parent_directory(Path(config.stdin), tmp_path):
+            delete_directory_and_empty_parents(Path(config.stdin).parent, tmp_path)
+        if is_parent_directory(Path(config.stdout), tmp_path):
+            delete_directory_and_empty_parents(Path(config.stdout).parent, tmp_path)
+        if is_parent_directory(Path(config.stderr), tmp_path):
+            delete_directory_and_empty_parents(Path(config.stderr).parent, tmp_path)
