@@ -74,11 +74,10 @@ def run_deamon(address: str, port: int, password: bytes, config_dir_path: str):
     tmp_dir_path.mkdir(parents=True, exist_ok=True)
     lock_file_path = tmp_dir_path / "lock"
     if lock_file_path.exists():
-        logging.error("Daemon is already running or tmp directory exists")
-        logging.error(
-            "If you want continue run daemon, please delete %s", lock_file_path
+        raise SyntaxError(
+            f"""Daemon is already running or tmp directory exists
+If you want continue run daemon, please delete {lock_file_path}"""
         )
-        return
     lock_file_path.touch()
     runner_manager = RunnerManager(
         runner_list_file_path=str(runner_list_file_path),

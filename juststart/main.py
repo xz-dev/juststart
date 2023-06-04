@@ -113,8 +113,7 @@ def main():
     if password is None:
         config_path = get_config_path()
         if not config_path:
-            logging.error("If password is not provided, config path must be provided")
-            return
+            raise SystemError("If password is not provided, config path must be provided")
         password = get_password_from_config_path(config_path)
 
     command = args.command
@@ -172,3 +171,6 @@ def main():
                     logging.warning(message)
                 elif e.level == "error":
                     logging.error(message)
+    else:
+        parser.print_help()
+        raise SystemError("No command specified")

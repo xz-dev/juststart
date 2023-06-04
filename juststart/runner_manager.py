@@ -197,7 +197,7 @@ class RunnerManager:
         runner = self.get_runner(path)
         try:
             down_runner_path = f"{path}.down"
-            if "down" in enable_compatible_runit:
+            if "down" in enable_compatible_runit and Path(path).name != "down":
                 down_runner_path = f"{Path(path).parent / 'down'}"
             RunnerManagerConfig._check_runner(down_runner_path)
             config = self._get_config_from_runner(runner)
