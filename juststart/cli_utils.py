@@ -1,3 +1,4 @@
+import shutil
 import logging
 from pathlib import Path
 
@@ -5,6 +6,9 @@ from .errors import ManagerConfigError
 from .runner_manager import RunnerManagerStatus
 from .runner_manager_config import RunnerManagerConfig
 
+def print_screen_divider():
+    cols = shutil.get_terminal_size().columns
+    print(f"{'-' * cols}")
 
 def get_password_from_config_path(config_path: str) -> bytes:
     password_path = Path(config_path) / "password"
@@ -25,9 +29,11 @@ def get_password_from_config_path(config_path: str) -> bytes:
         logging.warning("Password file saved to %s", password_path)
         return password
 
+def get_expanduser_path(path) -> str:
+    return str(Path(path).expanduser())
 
 def get_absolute_path(path) -> str:
-    return str(Path(path).expanduser().resolve())
+    return str(Path(path).resolve(strict=True))
 
 
 def runner_status_dict_to_str(

@@ -1,7 +1,8 @@
-from time import time
 import asyncio
 import subprocess
 from pathlib import Path
+from time import time
+
 from .errors import RunnerError
 
 
@@ -120,6 +121,7 @@ class Runner:
             self.process.wait(timeout=5)
         except subprocess.TimeoutExpired:
             import os
+
             os.kill(self.process.pid, signal.SIGKILL)
         try:
             self.process.wait(timeout=5)
@@ -226,8 +228,7 @@ class Runner:
             f"stdin: {self.stdin}",
             f"stdout: {self.stdout}",
             f"stderr: {self.stderr}",
-            f"",
             f"status: {status}",
             f"{ext_str}",
         ]
-        return status + "\n" + "\n".join(details)
+        return "\n".join(details)

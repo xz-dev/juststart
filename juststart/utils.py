@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from .path_helper import is_parent_directory
+
 
 def delete_directory_and_empty_parents(directory: Path, stop_directory: Path):
     if (
@@ -11,11 +13,3 @@ def delete_directory_and_empty_parents(directory: Path, stop_directory: Path):
     parent_dir = directory.parent
     if not any(parent_dir.iterdir()):
         delete_directory_and_empty_parents(parent_dir, stop_directory)
-
-
-def is_parent_directory(parent: Path, child: Path) -> bool:
-    try:
-        child.relative_to(parent)
-        return True
-    except ValueError:
-        return False
