@@ -24,7 +24,7 @@ positional arguments:
     reload_config       Reload config for a service
     status              Status of a service
     list                List all services
-    gc                  Garbage collect for stoped runners
+    gc                  Garbage collect for stoped services
     shutdown            Shutdown Daemon
 
 options:

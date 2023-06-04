@@ -88,7 +88,7 @@ def main():
     status_parser = subparsers.add_parser("list", help="List all services")
     # juststart gc
     status_parser = subparsers.add_parser(
-        "gc", help="Garbage collect for stoped runners"
+        "gc", help="Garbage collect for stoped services"
     )
 
     # juststart shutdown
