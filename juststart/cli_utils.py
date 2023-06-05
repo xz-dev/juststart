@@ -1,5 +1,5 @@
-import shutil
 import logging
+import shutil
 from pathlib import Path
 
 from .errors import ManagerConfigError
@@ -16,7 +16,7 @@ def pretty_print_str(obj, indent=0) -> str:
     result = ""
     if isinstance(obj, dict):
         for key, value in obj.items():
-            result += "  " * indent + str(key) + ": "
+            result += str(key) + ": "
             value_result = pretty_print_str(value, indent + 1)
             if isinstance(value, dict) or isinstance(value, list):
                 result += "\n"
@@ -27,8 +27,8 @@ def pretty_print_str(obj, indent=0) -> str:
         for item in obj:
             result += pretty_print_str(item, indent + 1) + "\n"
     else:
-        result += "  " * indent + str(obj)
-    return result
+        result += str(obj)
+    return "\n".join([" " * 2 * indent + line for line in result.split("\n")])
 
 
 def pretty_print(obj, indent=0) -> str:
