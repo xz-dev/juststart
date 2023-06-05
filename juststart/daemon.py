@@ -20,8 +20,8 @@ class Utils:
     def __init__(self, runner_manager: RunnerManager):
         self.runner_manager = runner_manager
 
-    def get_runner_status(self, path: str) -> str:
-        return self.runner_manager.get_runner(path).status_str
+    def get_runner_status(self, path: str) -> dict:
+        return self.runner_manager.get_runner(path).status_dict
 
     def shutdown(self):
         global shutdown

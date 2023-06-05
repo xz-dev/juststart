@@ -1,3 +1,4 @@
+import sys
 import argparse
 import logging
 from pathlib import Path
@@ -9,6 +10,8 @@ from .path_helper import check_path_valid, filter_path_list, is_parent_dir
 from .runner_manager import RunnerManager
 from .runner_manager_config import RunnerManagerConfig
 
+
+output_json = False
 
 def multi_path_command(
     command: str,
@@ -51,7 +54,7 @@ def single_path_command(
         elif command == "reload_config":
             runner_manager.reload_runner(path)
         elif command == "status":
-            print(utils.get_runner_status(path))
+             pretty_print(utils.get_runner_status(path))
         else:
             logging.error("Unknown command")
             return
@@ -124,6 +127,11 @@ def main():
         type=str,
         help="Path to config file",
     )
+    parser.add_argument(
+        "--json",
+        action=argparse.BooleanOptionalAction,
+        help="Path to config file",
+    )
     # juststart deamon
     subparsers.add_parser("serve", help="Run as a daemon")
 
@@ -192,6 +200,10 @@ def main():
     status_parser = subparsers.add_parser("shutdown", help="Shutdown Daemon")
 
     args = parser.parse_args()
+
+    output_json = args.json
+    if output_json is None:
+        output_json = sys.stdout.isatty()
 
     def get_config_path() -> str or None:
         config_path = None

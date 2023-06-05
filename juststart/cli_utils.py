@@ -6,9 +6,34 @@ from .errors import ManagerConfigError
 from .runner_manager import RunnerManagerStatus
 from .runner_manager_config import RunnerManagerConfig
 
+
 def print_screen_divider():
     cols = shutil.get_terminal_size().columns
     print(f"{'-' * cols}")
+
+
+def pretty_print_str(obj, indent=0) -> str:
+    result = ""
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            result += "  " * indent + str(key) + ": "
+            value_result = pretty_print_str(value, indent + 1)
+            if isinstance(value, dict) or isinstance(value, list):
+                result += "\n"
+            else:
+                value_result = value_result.strip()
+            result += value_result + "\n"
+    elif isinstance(obj, list):
+        for item in obj:
+            result += pretty_print_str(item, indent + 1) + "\n"
+    else:
+        result += "  " * indent + str(obj)
+    return result
+
+
+def pretty_print(obj, indent=0) -> str:
+    return print(pretty_print_str(obj, indent))
+
 
 def get_password_from_config_path(config_path: str) -> bytes:
     password_path = Path(config_path) / "password"
@@ -29,8 +54,10 @@ def get_password_from_config_path(config_path: str) -> bytes:
         logging.warning("Password file saved to %s", password_path)
         return password
 
+
 def get_expanduser_path(path) -> str:
     return str(Path(path).expanduser())
+
 
 def get_absolute_path(path) -> str:
     return str(Path(path).resolve(strict=True))

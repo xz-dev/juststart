@@ -9,7 +9,7 @@ from .errors import ManagerConfigError, RunnerError
 from .runner import Runner
 from .runner_config import RunnerConfig, get_runner_config
 from .runner_manager_config import RunnerManagerConfig
-from .utils import delete_directory_and_empty_parents, is_parent_directory
+from .utils import delete_directory_and_empty_parents
 
 
 class RunnerManagerStatus:
@@ -214,6 +214,10 @@ class RunnerManager:
         if not check_running or (check_running and runner.is_running()):
             runner.stop()
         self._pop_runner(runner)
+
+    def send_signal_runner(self, path, signal):
+        runner = self.get_runner(path)
+        runner.send_signal(signal)
 
     def _pop_runner(self, runner):
         config = self._get_config_from_runner(runner)

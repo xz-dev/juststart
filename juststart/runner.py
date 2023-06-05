@@ -4,6 +4,7 @@ from pathlib import Path
 from time import time
 
 from .errors import RunnerError
+from .runner_status import RunnerStatus, RunnerStatusKey
 
 
 class Runner:
@@ -22,15 +23,15 @@ class Runner:
         self.env = env
 
         self.auto_restart = auto_restart
-        self.booted_num = 0
-        self.boot_lock = asyncio.Lock()
-        self.blocked_num = 0
-        self.blocked_time = 0
-        self.blocked_program = None
 
         self._stdin = stdin
         self._stdout = stdout
         self._stderr = stderr
+
+        self._status = None
+
+        self.booted_num = 0
+        self.blocked_num = 0
 
         self.process = None
         self.returncode = None
@@ -39,21 +40,46 @@ class Runner:
         self.stdout_io = None
         self.stderr_io = None
 
+    @property
+    def status(self) -> RunnerStatus:
+        return self._status
+
+    @status.setter
+    def status(self, status: RunnerStatus):
+        if self._status and self._status.key == status.key:
+            raise RunnerError(f"Status is already {status}")
+        self._status = status
+
+    @property
+    def pid(self) -> int:
+        return self.process.pid if self.process else None
+
+    def _set_status(self, status_key: RunnerStatusKey, data: dict[str, any] = {}):
+        self.status = RunnerStatus(status_key, data | {"changed_time": time()})
+
+    def _update_status(self, data: dict[str, any], deleted_keys: list[str] = []):
+        self.status = RunnerStatus(
+            self.status.key,
+            {
+                key: value
+                for key, value in (self.status.data | data).items()
+                if key not in deleted_keys
+            },
+        )
+
     def start(self, loop: asyncio.AbstractEventLoop):
+        self._set_status(RunnerStatusKey.BOOTING)
         self.start_monitoring(loop)
 
     def start_monitoring(self, loop: asyncio.AbstractEventLoop):
         async def monitor():
-            if self.boot_lock.locked():
-                return
-            async with self.boot_lock:
-                self.auto_restart += 1
-                while self.auto_restart > 0:
-                    await self._check_blocker_list()
-                    if not self.is_running():
-                        await asyncio.to_thread(self._start)
-                        self.auto_restart -= 1
-                    await asyncio.sleep(0.1)
+            self.auto_restart += 1
+            while self.auto_restart > 0:
+                await self._check_blocker_list()
+                if not self.is_running():
+                    await asyncio.to_thread(self._start)
+                    self.auto_restart -= 1
+                await asyncio.sleep(0.1)
 
         future = asyncio.run_coroutine_threadsafe(monitor(), loop)
         return future
@@ -61,6 +87,9 @@ class Runner:
     async def _check_blocker(self, path: str):
         self.blocked_program = path
         self.blocked_time = time()
+        self._update_status(
+            {"blocked_program": path, "blocked_time": self.blocked_time},
+        )
         try:
             process = await asyncio.create_subprocess_exec(
                 path,
@@ -71,7 +100,7 @@ class Runner:
                 env=self.env,
             )
         except Exception as e:
-            self.blocked_program = e
+            self._update_status({"error": e})
         try:
             stdout, stderr = await process.communicate()
             sleep_time = int(stdout)
@@ -83,20 +112,33 @@ class Runner:
         except ValueError:
             pass
         if process.returncode != 0:
+            if self.status.data["blocked_program"] == path:
+                self._update_status(
+                    {
+                        "blocked_run_num": self.status.data["blocked_run_num"] + 1
+                        if "blocked_run_num" in self.status.data
+                        else 1,
+                    },
+                )
             await self._check_blocker(path)
 
     async def _check_blocker_list(self):
         path = Path(self.path).parent / "blocker"
         if path.exists():
+            block_list = [path]
             if path.is_dir():
-                for blocker in path.iterdir():
-                    await self._check_blocker(blocker)
-            else:
-                await self._check_blocker(path)
+                block_list = path.iterdir()
+            self._set_status(
+                RunnerStatusKey.BLOCKING,
+                {"block_list": block_list},
+            )
+            for blocker in block_list:
+                await self._check_blocker(blocker)
 
     def _start(self):
         if self.is_running():
             raise RunnerError(f"Process is already running")
+        self._set_status(RunnerStatusKey.RUNNING_READY)
         self.stdin_io = open(self.stdin, "a+")
         self.stdin_io.seek(0)
         self.stdout_io = open(self.stdout, "a")
@@ -109,29 +151,36 @@ class Runner:
             stderr=self.stderr_io,
             env=self.env,
         )
+        self._set_status(RunnerStatusKey.RUNNING)
         self.booted_num += 1
 
     def _shutdown(self):
+        self._update_status({"shutdown_command": "SIGTERM"})
         self.process.terminate()
         try:
             self.process.wait(timeout=5)
         except subprocess.TimeoutExpired:
+            self._update_status({"shutdown_command": "SIGKILL"})
             self.process.kill()
         try:
             self.process.wait(timeout=5)
         except subprocess.TimeoutExpired:
             import os
 
+            self._update_status({"shutdown_command": "SIGKILL_OS"})
             os.kill(self.process.pid, signal.SIGKILL)
         try:
             self.process.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            logger.error(f"Failed to kill process {self.process.pid}")
+            self._update_status({"error": "kill_fail"})
+            logger.error(f"Failed to kill process {self.pid}")
 
     def stop(self):
         if not self.is_running():
             raise RunnerError(f"{self.path} is not running")
+        self._set_status(RunnerStatusKey.STOPPING)
         self._shutdown()
+        self._set_status(RunnerStatusKey.STOPPED)
         self.returncode = self.process.returncode
         if self.stdin_io and not self.stdin_io.closed:
             self.stdin_io.close()
@@ -139,11 +188,14 @@ class Runner:
             self.stdout_io.close()
         if self.stderr_io and not self.stderr_io.closed:
             self.stderr_io.close()
+        self._set_status(RunnerStatusKey.DISTROYED)
 
     def send_signal(self, signal):
-        if not self.process:
+        if self.is_running():
             raise RunnerError("Process is not running")
+        self._set_status(RunnerStatusKey.SIGNAL_READY, {"signal": signal})
         self.process.send_signal(signal)
+        self._set_status(RunnerStatusKey.SIGNAL_SENT, {"signal": signal})
 
     def is_running(self):
         if self.process:
@@ -204,31 +256,15 @@ class Runner:
             old_stderr_io.close()
 
     @property
-    def status_str(self) -> str:
-        if self.is_blocking():
-            status = f"Booting(blocked: {self.blocked_num})"
-            ext_str = f"blocked_time: {self.blocked_time}\n"
-            ext_str += f"blocked_program: {self.blocked_program}"
-        elif self.booted_num > 0:
-            if self.is_running():
-                status = "Running"
-                ext_str = f"last returncode: {self.returncode}"
-            else:
-                status = "Stopped"
-                ext_str = f"returncode: {self.returncode}"
-        else:
-            status = "Never run"
-            ext_str = f"returncode: {self.returncode}"
-        details = [
-            f"path: {self.path}",
-            f"args: {self.args}",
-            f"env: {self.env}",
-            f"auto_restart: {self.auto_restart}",
-            f"booted_num: {self.booted_num}",
-            f"stdin: {self.stdin}",
-            f"stdout: {self.stdout}",
-            f"stderr: {self.stderr}",
-            f"status: {status}",
-            f"{ext_str}",
-        ]
-        return "\n".join(details)
+    def status_dict(self) -> dict:
+        return {
+            "status": self.status.to_dict(),
+            "path": self.path,
+            "args": self.args,
+            "env": self.env,
+            "auto_restart": self.auto_restart,
+            "booted_num": self.booted_num,
+            "stdin": self.stdin,
+            "stdout": self.stdout,
+            "stderr": self.stderr,
+        }
