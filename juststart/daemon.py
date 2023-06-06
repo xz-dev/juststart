@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import signal
 from multiprocessing.managers import BaseManager
 from pathlib import Path
 from threading import Thread
@@ -13,9 +14,6 @@ class MyManager(BaseManager):
     pass
 
 
-shutdown = False
-
-
 class Utils:
     def __init__(self, runner_manager: RunnerManager):
         self.runner_manager = runner_manager
@@ -26,6 +24,19 @@ class Utils:
     def shutdown(self):
         global shutdown
         shutdown = True
+
+
+shutdown = False
+
+
+def _handle_sigterm(signum, frame):
+    global shutdown
+    shutdown = True
+    logging.warning("Received SIGTERM, shutting down...")
+
+
+# 注册 SIGTERM 信号处理器
+signal.signal(signal.SIGTERM, _handle_sigterm)
 
 
 def get_manager(address: tuple[str, int], authkey: bytes) -> BaseManager:
@@ -79,43 +90,33 @@ def run_deamon(address: str, port: int, password: bytes, config_dir_path: str):
     default_runner_config_file_path.mkdir(parents=True, exist_ok=True)
     tmp_dir_path = config_dir / "runtime_tmp"
     tmp_dir_path.mkdir(parents=True, exist_ok=True)
-    lock_file_path = tmp_dir_path / "lock"
-    if lock_file_path.exists():
-        raise SyntaxError(
-            f"""Daemon is already running or tmp directory exists
-If you want continue run daemon, please delete {lock_file_path}"""
-        )
-    lock_file_path.touch()
+    runner_manager = RunnerManager(
+        runner_list_file_path=str(runner_list_file_path),
+        default_runner_config_path=str(default_runner_config_file_path),
+        tmp_dir_path=str(tmp_dir_path),
+    )
+    utils = Utils(runner_manager)
+    logging.warning("runner_manager: %s", runner_manager)
+    MyManager.register("get_runner_manager", lambda: runner_manager)
+    MyManager.register(
+        "get_runner_manager_config", lambda: runner_manager.manager_config
+    )
+    MyManager.register("get_utils", lambda: utils)
+    manager = get_manager(address=(address, port), authkey=password)
+    server = manager.get_server()
+    logging.warning("server: address=%s, port=%s", address, port)
+    server_thread = Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
     try:
-        runner_manager = RunnerManager(
-            runner_list_file_path=str(runner_list_file_path),
-            default_runner_config_path=str(default_runner_config_file_path),
-            tmp_dir_path=str(tmp_dir_path),
-        )
-        utils = Utils(runner_manager)
-        logging.warning("runner_manager: %s", runner_manager)
-        MyManager.register("get_runner_manager", lambda: runner_manager)
-        MyManager.register(
-            "get_runner_manager_config", lambda: runner_manager.manager_config
-        )
-        MyManager.register("get_utils", lambda: utils)
-        manager = get_manager(address=(address, port), authkey=password)
-        server = manager.get_server()
-        logging.warning("server: address=%s, port=%s", address, port)
-        server_thread = Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        try:
-            while server_thread.is_alive() and not shutdown:
-                server_thread.join(timeout=1)
-            logging.warning("Client ask shutdown")
-        except KeyboardInterrupt:
-            pass
-        finally:
-            logging.warning("Shutting down the server...")
-            asyncio.run(cancel_all_tasks())
-            runner_manager.stop_manager()
-            logging.warning("Server stopped")
-            logging.warning("Lock file deleted")
-            logging.warning("Bye!")
+        while server_thread.is_alive() and not shutdown:
+            server_thread.join(timeout=1)
+        logging.warning("Client ask shutdown")
+    except KeyboardInterrupt:
+        pass
     finally:
-            lock_file_path.unlink()
+        logging.warning("Shutting down the server...")
+        asyncio.run(cancel_all_tasks())
+        runner_manager.stop_manager()
+        logging.warning("Server stopped")
+        logging.warning("Lock file deleted")
+        logging.warning("Bye!")
