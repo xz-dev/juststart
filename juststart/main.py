@@ -1,6 +1,6 @@
-import sys
 import argparse
 import logging
+import sys
 from pathlib import Path
 
 from .cli_utils import *
@@ -10,8 +10,8 @@ from .path_utils import check_path_valid, filter_path_list, is_parent_dir
 from .runner_manager import RunnerManager
 from .runner_manager_config import RunnerManagerConfig
 
-
 output_json = False
+
 
 def multi_path_command(
     command: str,
@@ -20,11 +20,23 @@ def multi_path_command(
     manager_config: RunnerManagerConfig,
     utils: Utils,
 ):
-    logging.info(f"Running command {command} for {path_list}")
+    if not output_json:
+        print_terminal(
+            msg=f"Running command {command} for {path_list}", json_format=output_json
+        )
+    else:
+        print_terminal(
+            data={"command": command, "path_list": path_list},
+            json_format=output_json,
+        )
     for path in path_list:
-        print()
-        logging.info(f"Path: {path}")
-        print_screen_divider()
+        if not output_json:
+            print()
+        if not output_json:
+            print_terminal(msg=f"Path: {path}", json_format=output_json)
+            print_screen_divider()
+        else:
+            print_terminal(data={"path": path}, json_format=output_json)
         single_path_command(command, path, runner_manager, manager_config, utils)
 
 
@@ -54,10 +66,10 @@ def single_path_command(
         elif command == "reload_config":
             runner_manager.reload_runner(path)
         elif command == "status":
-             pretty_print(utils.get_runner_status(path))
+            pretty_print(utils.get_runner_status(path))
         else:
-            logging.error("Unknown command")
-            return
+            print_terminal(msg=f"Unknown command {command}", json_format=output_json)
+            raise SystemExit(1)
     except BaseError as e:
         message = e.message
         if e.level == "debug":
@@ -89,7 +101,11 @@ def run_command_for_runner(
         all_path_list = runner_manager.get_runner_status_dict().keys()
         path_list = filter_path_list(path, all_path_list)
         if not path_list:
-            raise SystemError("No valid path specified")
+            print_terminal(
+                msg=f"No valid path specified for {command}",
+                json_format=output_json,
+            )
+            raise SystemExit(1)
         multi_path_command(command, path_list, runner_manager, manager_config, utils)
 
 
@@ -203,7 +219,7 @@ def main():
 
     output_json = args.json
     if output_json is None:
-        output_json = sys.stdout.isatty()
+        output_json = False
 
     def get_config_path() -> str or None:
         config_path = None
@@ -212,9 +228,11 @@ def main():
         except AttributeError:
             pass
         if not config_path:
-            logging.error("No config file specified")
+            print_terminal(msg="No config file specified", json_format=output_json)
         elif not Path(config_path).is_dir():
-            logging.error("Config file must be a directory")
+            print_terminal(
+                msg="Config file must be a directory", json_format=output_json
+            )
         else:
             return config_path
 
@@ -222,9 +240,11 @@ def main():
     if password is None:
         config_path = get_config_path()
         if not config_path:
-            raise SystemError(
-                "If password is not provided, config path must be provided"
+            print_terminal(
+                msg="If password is not provided, config path must be provided",
+                json_format=output_json,
             )
+            raise SystemExit(1)
         password = get_password_from_config_path(config_path)
 
     command = args.command
@@ -245,9 +265,20 @@ def main():
         if command == "shutdown":
             utils.shutdown()
         elif command == "list":
-            print(runner_status_dict_to_str(runner_manager.get_runner_status_dict()))
+            status_dict = runner_manager.get_runner_status_dict()
+            if output_json:
+                print_terminal(data=status_dict, json_format=output_json)
+            else:
+                print_terminal(msg=runner_status_dict_to_str(status_dict))
         elif command == "gc":
-            print("\n".join(runner_manager.clean_runner()))
+            path_list = runner_manager.clean_runner()
+            if output_json:
+                print_terminal(data=path_list, json_format=output_json)
+            else:
+                print_terminal(
+                    msg="\n".join(runner_manager.clean_runner()),
+                    json_format=output_json,
+                )
         else:
             paths = args.path
             run_command_for_runner(
@@ -255,4 +286,5 @@ def main():
             )
     else:
         parser.print_help()
-        raise SystemError("No command specified")
+        print_terminal(msg="No command specified", json_format=output_json)
+        raise SystemExit(1)

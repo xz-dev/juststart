@@ -1,5 +1,6 @@
 import logging
 import shutil
+from json import dumps
 from pathlib import Path
 
 from .errors import ManagerConfigError
@@ -91,27 +92,52 @@ def runner_status_dict_to_str(
         result += " ".join(result_list)
     return result[:-1]
 
+
 """Search current directory and its child directoty and its parent directory by keyword in the keyword_list
 Search all child directory but ended when the parent directory not have any match file.
 Return a dict of file key is keyword and value is the path list which include the keyword in the name.
 """
-def _search_file_by_keywords(keyword_list: list[str], path: Path) -> dict[str: list[str]]:
+
+
+def _search_file_by_keywords(
+    keyword_list: list[str], path: Path
+) -> dict[str : list[str]]:
     result = {keyword: [] for keyword in keyword_list}
     path = Path(path)
     # search parent directory
     for keyword in keyword_list:
         pattern = f"*{keyword}*"
         parent = path.parent
-        while (any(parent.glob(pattern))):
-            result[keyword].append([file for file in parent.glob(pattern) if file.is_file()])
+        while any(parent.glob(pattern)):
+            result[keyword].append(
+                [file for file in parent.glob(pattern) if file.is_file()]
+            )
             parent = parent.parent
 
     # search child directory
     for keyword in keywords:
         pattern = f"**/*{keyword}*"
-        result[keyword].append([file for file in folder.glob(pattern) if file.is_file()])
+        result[keyword].append(
+            [file for file in folder.glob(pattern) if file.is_file()]
+        )
 
     return result
 
-def search_file_by_keywords(keyword_list: list[str], path: str) -> dict[str: list[str]]:
+
+def search_file_by_keywords(
+    keyword_list: list[str], path: str
+) -> dict[str : list[str]]:
     return _search_file_by_keywords(keyword_list, Path(path))
+
+
+def print_terminal(msg: str = None, data: dict = None, json_format: bool = False):
+    if msg:
+        if json_format:
+            print(dumps({"msg": msg}))
+        else:
+            print(msg)
+    if data:
+        if json_format:
+            print(dumps(data))
+        else:
+            print(pretty_print_str(data))
