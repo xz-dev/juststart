@@ -3,12 +3,15 @@ from asyncio import new_event_loop
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Thread
-from .config import enable_compatible_runit
+from typing import Callable
 
+from .config import enable_compatible_runit
 from .errors import ManagerConfigError, RunnerError
+from .path_utils import search_file_by_keywords
 from .runner import Runner
 from .runner_config import RunnerConfig, get_runner_config
 from .runner_manager_config import RunnerManagerConfig
+from .runner_status import RUNNING, RunnerStatus
 from .utils import delete_directory_and_empty_parents
 
 
@@ -108,8 +111,9 @@ class RunnerManager:
             sorted_status_dict[path] = sorted(status_list)
         return sorted_status_dict
 
-    def _get_runner_config(self, config_path: str) -> RunnerConfig:
+    def _get_runner_config(self, path: str, config_path: str) -> RunnerConfig:
         return get_runner_config(
+            path,
             config_path,
             self.default_runner_config_path,
             Path(self.tmp_dir_path) / "runner",
@@ -128,7 +132,7 @@ class RunnerManager:
     def reload_runner(self, path: str):
         runner = self.get_runner(path)
         config_path = str(Path(path).parent)
-        config = self._get_runner_config(config_path)
+        config = self._get_runner_config(path, config_path)
         need_stop = False
         need_start = False
 
@@ -175,10 +179,25 @@ class RunnerManager:
             logging.info(e.message)
         self.start_runner(path)
 
-    def start_runner(self, path, config: RunnerConfig = None) -> Runner:
+    def start_runner(
+        self,
+        path,
+        config: RunnerConfig = None,
+        status_changed_hook: Callable[[Runner, RunnerStatus], None] = None,
+    ) -> Runner:
         config_path = str(Path(path).parent)
         if config is None:
-            config = self._get_runner_config(config_path)
+            config = self._get_runner_config(path, config_path)
+        if status_changed_hook:
+
+            def status_changed_hook(runner, status):
+                self._run_runner_status_hook(runner, status)
+                status_changed_hook(runner, status)
+
+        else:
+            status_changed_hook = lambda runner, status: self._run_runner_status_hook(
+                runner, status
+            )
         runner = Runner(
             path=path,
             args=config.args,
@@ -187,6 +206,7 @@ class RunnerManager:
             stdin=config.stdin,
             stdout=config.stdout,
             stderr=config.stderr,
+            status_changed_hook=status_changed_hook,
         )
         self._init_runner_runtime(self._get_config_from_runner(runner))
         runner.start(self.loop)
@@ -238,3 +258,30 @@ class RunnerManager:
         delete_directory_and_empty_parents(Path(config.stdin).parent, tmp_path)
         delete_directory_and_empty_parents(Path(config.stdout).parent, tmp_path)
         delete_directory_and_empty_parents(Path(config.stderr).parent, tmp_path)
+
+    def _run_runner_status_hook(self, runner: Runner, status: RunnerStatus):
+        path = Path(runner.path)
+        work_path = path.parent
+
+        def check_script_available(script_path):
+            try:
+                RunnerManagerConfig._check_runner(script_path)
+                return True
+            except ManagerConfigError:
+                return False
+
+        runner_config = self._get_config_from_runner(runner)
+
+        for script_path in search_file_by_keywords(
+            [status.key], work_path, compound_word=path.name, search_parent=True
+        ):
+            if check_script_available(script_path):
+
+                def script_runner_hook(runner, status):
+                    if status.key == RUNNING:
+                        try:
+                            runner.wait()
+                        finally:
+                            self.stop_runner(script_path)
+
+                self.start_runner(script_path, runner_config)

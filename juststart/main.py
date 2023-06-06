@@ -6,7 +6,7 @@ from pathlib import Path
 from .cli_utils import *
 from .daemon import Utils, connect_manager, get_objs, run_deamon
 from .errors import BaseError
-from .path_helper import check_path_valid, filter_path_list, is_parent_dir
+from .path_utils import check_path_valid, filter_path_list, is_parent_dir
 from .runner_manager import RunnerManager
 from .runner_manager_config import RunnerManagerConfig
 

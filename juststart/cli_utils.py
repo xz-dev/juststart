@@ -28,7 +28,8 @@ def pretty_print_str(obj, indent=0) -> str:
             result += pretty_print_str(item, indent + 1) + "\n"
     else:
         result += str(obj)
-    return "\n".join([" " * 2 * indent + line for line in result.split("\n")])
+    indent_string = " " * 2 * indent
+    return "\n".join([indent_string + line for line in result.split("\n")])
 
 
 def pretty_print(obj, indent=0) -> str:
@@ -89,3 +90,28 @@ def runner_status_dict_to_str(
         result_list.append("\n")
         result += " ".join(result_list)
     return result[:-1]
+
+"""Search current directory and its child directoty and its parent directory by keyword in the keyword_list
+Search all child directory but ended when the parent directory not have any match file.
+Return a dict of file key is keyword and value is the path list which include the keyword in the name.
+"""
+def _search_file_by_keywords(keyword_list: list[str], path: Path) -> dict[str: list[str]]:
+    result = {keyword: [] for keyword in keyword_list}
+    path = Path(path)
+    # search parent directory
+    for keyword in keyword_list:
+        pattern = f"*{keyword}*"
+        parent = path.parent
+        while (any(parent.glob(pattern))):
+            result[keyword].append([file for file in parent.glob(pattern) if file.is_file()])
+            parent = parent.parent
+
+    # search child directory
+    for keyword in keywords:
+        pattern = f"**/*{keyword}*"
+        result[keyword].append([file for file in folder.glob(pattern) if file.is_file()])
+
+    return result
+
+def search_file_by_keywords(keyword_list: list[str], path: str) -> dict[str: list[str]]:
+    return _search_file_by_keywords(keyword_list, Path(path))

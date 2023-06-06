@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from .path_helper import is_parent_dir
+from .path_utils import is_parent_dir
 
 
 def delete_directory_and_empty_parents(directory: Path, stop_directory: Path):

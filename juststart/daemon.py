@@ -79,34 +79,36 @@ def run_deamon(address: str, port: int, password: bytes, config_dir_path: str):
 If you want continue run daemon, please delete {lock_file_path}"""
         )
     lock_file_path.touch()
-    runner_manager = RunnerManager(
-        runner_list_file_path=str(runner_list_file_path),
-        default_runner_config_path=str(default_runner_config_file_path),
-        tmp_dir_path=str(tmp_dir_path),
-    )
-    utils = Utils(runner_manager)
-    logging.warning("runner_manager: %s", runner_manager)
-    MyManager.register("get_runner_manager", lambda: runner_manager)
-    MyManager.register(
-        "get_runner_manager_config", lambda: runner_manager.manager_config
-    )
-    MyManager.register("get_utils", lambda: utils)
-    manager = get_manager(address=(address, port), authkey=password)
-    server = manager.get_server()
-    logging.warning("server: address=%s, port=%s", address, port)
-    server_thread = Thread(target=server.serve_forever, daemon=True)
-    server_thread.start()
     try:
-        while server_thread.is_alive() and not shutdown:
-            server_thread.join(timeout=1)
-        logging.warning("Client ask shutdown")
-    except KeyboardInterrupt:
-        pass
+        runner_manager = RunnerManager(
+            runner_list_file_path=str(runner_list_file_path),
+            default_runner_config_path=str(default_runner_config_file_path),
+            tmp_dir_path=str(tmp_dir_path),
+        )
+        utils = Utils(runner_manager)
+        logging.warning("runner_manager: %s", runner_manager)
+        MyManager.register("get_runner_manager", lambda: runner_manager)
+        MyManager.register(
+            "get_runner_manager_config", lambda: runner_manager.manager_config
+        )
+        MyManager.register("get_utils", lambda: utils)
+        manager = get_manager(address=(address, port), authkey=password)
+        server = manager.get_server()
+        logging.warning("server: address=%s, port=%s", address, port)
+        server_thread = Thread(target=server.serve_forever, daemon=True)
+        server_thread.start()
+        try:
+            while server_thread.is_alive() and not shutdown:
+                server_thread.join(timeout=1)
+            logging.warning("Client ask shutdown")
+        except KeyboardInterrupt:
+            pass
+        finally:
+            logging.warning("Shutting down the server...")
+            asyncio.run(cancel_all_tasks())
+            runner_manager.stop_manager()
+            logging.warning("Server stopped")
+            logging.warning("Lock file deleted")
+            logging.warning("Bye!")
     finally:
-        logging.warning("Shutting down the server...")
-        asyncio.run(cancel_all_tasks())
-        runner_manager.stop_manager()
-        logging.warning("Server stopped")
-        lock_file_path.unlink()
-        logging.warning("Lock file deleted")
-        logging.warning("Bye!")
+            lock_file_path.unlink()

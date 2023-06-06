@@ -1,10 +1,13 @@
+from __future__ import annotations
+
 import asyncio
 import subprocess
 from pathlib import Path
 from time import time
+from typing import Callable
 
 from .errors import RunnerError
-from .runner_status import RunnerStatus, RunnerStatusKey
+from .runner_status import *
 
 
 class Runner:
@@ -17,6 +20,7 @@ class Runner:
         stdin: str,
         stdout: str,
         stderr: str,
+        status_changed_hook: Callable[[Runner, RunnerStatus], None],
     ):
         self.path = path
         self._args = args
@@ -29,6 +33,7 @@ class Runner:
         self._stderr = stderr
 
         self._status = None
+        self._status_changed_hook = status_changed_hook
 
         self.booted_num = 0
         self.blocked_num = 0
@@ -49,12 +54,13 @@ class Runner:
         if self._status and self._status.key == status.key:
             raise RunnerError(f"Status is already {status}")
         self._status = status
+        self._status_changed_hook(self, status)
 
     @property
     def pid(self) -> int:
         return self.process.pid if self.process else None
 
-    def _set_status(self, status_key: RunnerStatusKey, data: dict[str, any] = {}):
+    def _set_status(self, status_key: str, data: dict[str, any] = {}):
         self.status = RunnerStatus(status_key, data | {"changed_time": time()})
 
     def _update_status(self, data: dict[str, any], deleted_keys: list[str] = []):
@@ -68,7 +74,7 @@ class Runner:
         )
 
     def start(self, loop: asyncio.AbstractEventLoop):
-        self._set_status(RunnerStatusKey.BOOTING)
+        self._set_status(BOOTING)
         self.start_monitoring(loop)
 
     def start_monitoring(self, loop: asyncio.AbstractEventLoop):
@@ -129,7 +135,7 @@ class Runner:
             if path.is_dir():
                 block_list = path.iterdir()
             self._set_status(
-                RunnerStatusKey.BLOCKING,
+                BLOCKING,
                 {"block_list": block_list},
             )
             for blocker in block_list:
@@ -138,7 +144,7 @@ class Runner:
     def _start(self):
         if self.is_running():
             raise RunnerError(f"Process is already running")
-        self._set_status(RunnerStatusKey.RUNNING_READY)
+        self._set_status(RUNNING_READY)
         self.stdin_io = open(self.stdin, "a+")
         self.stdin_io.seek(0)
         self.stdout_io = open(self.stdout, "a")
@@ -151,7 +157,7 @@ class Runner:
             stderr=self.stderr_io,
             env=self.env,
         )
-        self._set_status(RunnerStatusKey.RUNNING)
+        self._set_status(RUNNING)
         self.booted_num += 1
 
     def _shutdown(self):
@@ -178,9 +184,9 @@ class Runner:
     def stop(self):
         if not self.is_running():
             raise RunnerError(f"{self.path} is not running")
-        self._set_status(RunnerStatusKey.STOPPING)
+        self._set_status(STOPPING)
         self._shutdown()
-        self._set_status(RunnerStatusKey.STOPPED)
+        self._set_status(STOPPED)
         self.returncode = self.process.returncode
         if self.stdin_io and not self.stdin_io.closed:
             self.stdin_io.close()
@@ -188,14 +194,14 @@ class Runner:
             self.stdout_io.close()
         if self.stderr_io and not self.stderr_io.closed:
             self.stderr_io.close()
-        self._set_status(RunnerStatusKey.DISTROYED)
+        self._set_status(DISTROYED)
 
     def send_signal(self, signal):
         if self.is_running():
             raise RunnerError("Process is not running")
-        self._set_status(RunnerStatusKey.SIGNAL_READY, {"signal": signal})
+        self._set_status(SIGNAL_READY, {"signal": signal})
         self.process.send_signal(signal)
-        self._set_status(RunnerStatusKey.SIGNAL_SENT, {"signal": signal})
+        self._set_status(SIGNAL_SENT, {"signal": signal})
 
     def is_running(self):
         if self.process:
@@ -268,3 +274,9 @@ class Runner:
             "stdout": self.stdout,
             "stderr": self.stderr,
         }
+
+    def wait(self):
+        if self.is_running():
+            self.process.wait()
+        else:
+            raise RunnerError(f"{self.path} is not running")
