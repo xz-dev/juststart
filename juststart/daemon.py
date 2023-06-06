@@ -67,6 +67,13 @@ def run_deamon(address: str, port: int, password: bytes, config_dir_path: str):
     global shutdown
     shutdown = False
     config_dir = Path(config_dir_path)
+
+    # monkey patch
+    monkey_patch_dir = config_dir / "monkey_patch"
+    if monkey_patch_dir.exists():
+        for patch_file in monkey_patch_dir.iterdir():
+            exec(patch_file.read_text())
+
     runner_list_file_path = config_dir / "runner_list"
     default_runner_config_file_path = config_dir / "default"
     default_runner_config_file_path.mkdir(parents=True, exist_ok=True)
