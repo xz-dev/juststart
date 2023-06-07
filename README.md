@@ -1,10 +1,10 @@
 # juststart (jst)  
   
-A simple yet extensible cross-platform service manager.  
+A simple, intuitive, and extensible cross-platform service manager inspired by Gentoo's Portage and supporting monkey patching.  
   
 ## Description  
   
-juststart (shortened as jst) is a service management system aimed at replacing runit and systemctl service managers. It features intuitive scripts (including status hook scripts), script-based timers, flexible configurations, and user-friendly automation. In addition, it follows the principle of behavior as parameters, allowing users to use this service management system more naturally.  
+juststart (shortened as jst) is a service management system designed to replace runit and systemctl service managers. It features intuitive scripts (including status hook scripts), script-based timers, flexible configurations, and user-friendly automation. In addition, it follows the principle of behavior as parameters, allowing users to use this service management system more naturally. With influences from Gentoo's Portage, juststart also supports monkey patching for easy customization of the software's behavior.  
   
   
 ## Features  
@@ -13,9 +13,11 @@ juststart (shortened as jst) is a service management system aimed at replacing r
 - Script-based timers  
 - Flexible configurations and automation  
 - Behavior as parameters  
-- Can be used as an init system  
+- Supports monkey patching for easy behavior customization  
+- Can be used as an init system(Planing)  
 - Designed for cross-platform compatibility  
 - Accepts other software (e.g., systemd, runit) as backends  
+- Inspired by Gentoo's Portage with a simple world list  
   
 ## Dependencies  
   
@@ -25,9 +27,9 @@ juststart (shortened as jst) is a service management system aimed at replacing r
   
 It is recommended to install using pip from GitHub:  
   
-```bash  
-pip install git+https://github.com/xz-dev/juststart.git  
-```  
+```bash
+pip install git+https://github.com/xz-dev/juststart.git
+```
   
 Or use tools like pipx for installation.  
   
@@ -36,21 +38,21 @@ Or use tools like pipx for installation.
 1. Create a service directory:  
   
    ```bash
-   mkdir ~/server  
-   ```  
+   mkdir ~/server
+   ```
   
 2. Start the juststart service:  
   
    ```bash
-   juststart -c ~/server serve  
-   ```  
+   juststart -c ~/server serve
+   ```
   
 3. Open a new terminal and use the following commands to add, manage, and view the service status:  
   
    ```bash
-   jst -c ~/server add run.sh  
-   jst -c ~/server status run  
-   ``  
+   jst -c ~/server add run.sh
+   jst -c ~/server status run
+   ```
   
 ## Commands  
   
