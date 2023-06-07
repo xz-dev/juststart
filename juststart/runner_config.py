@@ -49,11 +49,12 @@ class RunnerConfig:
         for arg in args:
             if arg[:1] == "-" and arg[1:]:
                 arg_key = arg[1:].strip()
-                if arg_key in self.args:
-                    self.args.remove(arg[1:])
-                elif arg_key == "*":
+                if arg_key == "*":
                     self.args = []
-            self.args.append(arg)
+                elif arg_key in self.args:
+                    self.args.remove(arg[1:])
+            else:
+                self.args.append(arg)
         self.env = self.env | env
         self.auto_restart = auto_restart
         self.stdin = stdin if stdin else self.stdin
@@ -84,9 +85,10 @@ def _parse_args(args_file: list[str], args: list[str]) -> list[str]:
     for path in args_file:
         with open(path) as f:
             for arg in f.readlines():
+                arg = arg.strip()
                 if arg[:1] == "-" and arg[1:]:
                     arg_key = arg[1:].strip()
-                    if arg_key in self.args:
+                    if arg_key in args:
                         args.remove(arg[1:])
                     elif arg_key == "*":
                         args = []
@@ -124,7 +126,7 @@ def _parse_config_frag(config_file: str):
 
 
 def _get_runner_config_by_path(
-        compound_word: str, config_path: str, runner_config: RunnerConfig
+    compound_word: str, config_path: str, runner_config: RunnerConfig
 ) -> RunnerConfig:
     config_frag = ConfigFrag(
         auto_restart=runner_config.auto_restart,
@@ -154,6 +156,7 @@ def _get_runner_config_by_path(
         stderr=config_frag.stderr,
     )
 
+
 def get_runner_config(
     runner_path: str, work_path: str, default_config_path: str, tmp_dir_path: str
 ) -> RunnerConfig:
@@ -161,10 +164,16 @@ def get_runner_config(
     compound_word = Path(runner_path).name
     default_config_path = Path(default_config_path)
     tmp_dir_path = Path(f"{tmp_dir_path}/{work_path}")
-    buildin_default_config = get_default_config(work_path, std_path=tmp_dir_path / "std")
+    buildin_default_config = get_default_config(
+        work_path, std_path=tmp_dir_path / "std"
+    )
 
-    setting_default_config = _get_runner_config_by_path(compound_word, default_config_path, buildin_default_config)
+    setting_default_config = _get_runner_config_by_path(
+        compound_word, default_config_path, buildin_default_config
+    )
 
-    runner_config = _get_runner_config_by_path(compound_word, work_path, setting_default_config)
+    runner_config = _get_runner_config_by_path(
+        compound_word, work_path, setting_default_config
+    )
 
     return runner_config
