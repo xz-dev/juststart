@@ -1,3 +1,4 @@
+import shutil
 import asyncio
 import logging
 import signal
@@ -89,7 +90,6 @@ def run_deamon(address: str, port: int, password: bytes, config_dir_path: str):
     default_runner_config_file_path = config_dir / "default"
     default_runner_config_file_path.mkdir(parents=True, exist_ok=True)
     tmp_dir_path = config_dir / "runtime_tmp"
-    tmp_dir_path.unlink(missing_ok=True)
     tmp_dir_path.mkdir(parents=True, exist_ok=True)
     runner_manager = RunnerManager(
         runner_list_file_path=str(runner_list_file_path),
