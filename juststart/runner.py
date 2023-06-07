@@ -80,12 +80,12 @@ class Runner:
     def start_monitoring(self, loop: asyncio.AbstractEventLoop):
         async def monitor():
             self.auto_restart += 1
-            while self.auto_restart > 0:
+            while self.auto_restart > 0 or self.auto_restart == -1:
                 await self._check_blocker_list()
                 if not self.is_running():
                     await asyncio.to_thread(self._start)
                     self.auto_restart -= 1
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.1 if self.auto_restart > 0 else 1)
 
         future = asyncio.run_coroutine_threadsafe(monitor(), loop)
         return future
