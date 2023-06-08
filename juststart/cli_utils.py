@@ -62,7 +62,7 @@ def get_expanduser_path(path) -> str:
 
 
 def get_absolute_path(path) -> str:
-    return str(Path(path).resolve(strict=True))
+    return str(Path(path).resolve(strict=False))
 
 
 def runner_status_dict_to_str(

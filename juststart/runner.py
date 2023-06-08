@@ -52,7 +52,7 @@ class Runner:
     @status.setter
     def status(self, status: RunnerStatus):
         if self._status and self._status.key == status.key:
-            raise RunnerError(f"Status is already {status}")
+            raise RunnerError(f"Status is already {status.key}")
         self._status = status
         self._status_changed_hook(self, status)
 

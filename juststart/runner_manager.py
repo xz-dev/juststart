@@ -187,7 +187,10 @@ class RunnerManager:
     ) -> Runner:
         config_path = str(Path(path).parent)
         if config is None:
-            config = self._get_runner_config(path, config_path)
+            try:
+                config = self._get_runner_config(path, config_path)
+            except Exception as e:
+                logging.exception(e)
         if status_changed_hook:
 
             def status_changed_hook(runner, status):
